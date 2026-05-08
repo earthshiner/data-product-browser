@@ -204,7 +204,8 @@ class TestSvgDiagram:
 
     def test_multiple_tables(self):
         svg = make_join_diagram(["loan", "borrower", "product"])
-        assert svg.count("<rect") == 3
+        # 3 table boxes + 2 legend colour-key boxes = 5 rects
+        assert svg.count("<rect") == 5
         assert "borrower" in svg
 
     def test_xss_escaped(self):
