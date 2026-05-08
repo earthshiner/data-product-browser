@@ -1,4 +1,4 @@
-# tdp-reporter
+# ai-native-data-product-guide
 
 Generate AI-Native Data Product artefacts (Cookbook, Ops Dashboard) deterministically from Teradata metadata.
 
