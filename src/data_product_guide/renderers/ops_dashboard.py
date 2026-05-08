@@ -111,6 +111,84 @@ def _build_data(dp: DataProduct) -> dict:
         for e in dp.change_events[:20]
     ]
 
+    # --- Data Freshness (Panel 2) from lineage_runs --------------------------
+    freshness_rows = []
+    for r in dp.lineage_runs:
+        age_h = (dp.generated_at - r.run_dts.replace(tzinfo=dp.generated_at.tzinfo
+                 if r.run_dts.tzinfo is None else r.run_dts.tzinfo)).total_seconds() / 3600
+        if age_h <= 24:
+            status = "FRESH"
+        elif age_h <= 48:
+            status = "STALE"
+        else:
+            status = "CRITICAL"
+        freshness_rows.append({
+            "job": r.job_name or f"lineage_{r.lineage_id}",
+            "run_dts": r.run_dts.isoformat(),
+            "run_status": r.run_status,
+            "freshness_status": status,
+            "freshness_hours": round(age_h, 1),
+            "duration_ms": r.run_duration_ms,
+            "records_written": r.records_written,
+            "error": r.error_message,
+        })
+
+    fresh_count = sum(1 for r in freshness_rows if r["freshness_status"] == "FRESH")
+    stale_count = sum(1 for r in freshness_rows if r["freshness_status"] == "STALE")
+    critical_count = sum(1 for r in freshness_rows if r["freshness_status"] == "CRITICAL")
+
+    # --- Changes & Decisions (Panel 8) from Memory ---------------------------
+    change_log_rows = [
+        {
+            "change_id": c.change_id,
+            "version": c.version_number,
+            "title": c.change_title,
+            "type": c.change_type,
+            "category": c.change_category,
+            "module": c.source_module,
+            "deployed_date": c.deployed_date.isoformat() if c.deployed_date else None,
+            "status": c.deployment_status,
+        }
+        for c in dp.change_log[:20]
+    ]
+    design_decision_rows = [
+        {
+            "decision_id": d.decision_id,
+            "title": d.decision_title,
+            "category": d.decision_category,
+            "status": d.decision_status,
+            "module": d.source_module,
+            "rationale": d.rationale,
+            "decided_by": d.decided_by,
+            "decided_date": d.decided_date.isoformat() if d.decided_date else None,
+        }
+        for d in dp.decisions[:20]
+    ]
+
+    # --- Glossary & Discovery (Panel 9) from Memory + Semantic ---------------
+    glossary_rows = [
+        {
+            "term": g.term,
+            "category": g.term_category,
+            "definition": g.definition,
+            "context": g.business_context,
+            "related_table": g.related_table,
+            "module": g.source_module,
+        }
+        for g in dp.glossary
+    ]
+    entity_rows = [
+        {
+            "name": e.entity_name,
+            "module": e.module_name,
+            "database": e.database_name,
+            "table": e.table_name,
+            "description": e.entity_description,
+            "natural_key": e.natural_key_column,
+        }
+        for e in dp.entities
+    ]
+
     return {
         "product_name": dp.product_name,
         "generated_at": dp.generated_at.isoformat(),
@@ -125,6 +203,20 @@ def _build_data(dp: DataProduct) -> dict:
         "recent_changes": recent_changes,
         "recipe_count": len(dp.recipes),
         "entity_count": len(dp.entities),
+        # Panel 2
+        "freshness_rows": freshness_rows,
+        "freshness_summary": {
+            "fresh": fresh_count,
+            "stale": stale_count,
+            "critical": critical_count,
+            "total": len(freshness_rows),
+        },
+        # Panel 8
+        "change_log": change_log_rows,
+        "design_decisions": design_decision_rows,
+        # Panel 9
+        "glossary": glossary_rows,
+        "entities": entity_rows,
     }
 
 

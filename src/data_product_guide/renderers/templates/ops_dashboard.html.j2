@@ -176,6 +176,59 @@ main { max-width: 1480px; margin: 0 auto; padding: 24px 28px 60px; }
     </div>
   </div>
 
+  <!-- Panel 2: Data Freshness -->
+  <div class="panel" id="panel-freshness">
+    <div class="panel-head" onclick="togglePanel(this)">
+      <span class="chev">▾</span>
+      <h2>Data Freshness &amp; Lineage Status</h2>
+      <div class="panel-sum" id="freshness-sum"></div>
+    </div>
+    <div class="panel-body">
+      <div class="mgrid" id="freshness-metrics"></div>
+      <table class="dtable" id="freshness-table">
+        <thead><tr><th>Job</th><th>Freshness</th><th>Last Run</th><th>Run Status</th><th>Duration</th><th>Records Written</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Panel 8: Changes & Decisions -->
+  <div class="panel" id="panel-decisions">
+    <div class="panel-head" onclick="togglePanel(this)">
+      <span class="chev">▾</span>
+      <h2>Changes &amp; Design Decisions</h2>
+      <div class="panel-sum" id="decisions-sum"></div>
+    </div>
+    <div class="panel-body">
+      <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">Recent change log entries and accepted design decisions from the Memory module.</p>
+      <table class="dtable" id="changelog-table">
+        <thead><tr><th>Change ID</th><th>Version</th><th>Title</th><th>Type</th><th>Module</th><th>Status</th><th>Deployed</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <h3 style="font-size:13px;font-weight:600;color:var(--text);margin:20px 0 8px;">Design Decisions</h3>
+      <table class="dtable" id="decisions-table">
+        <thead><tr><th>Decision ID</th><th>Title</th><th>Category</th><th>Module</th><th>Status</th><th>Decided By</th><th>Date</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Panel 9: Business Glossary & Discovery -->
+  <div class="panel" id="panel-glossary">
+    <div class="panel-head" onclick="togglePanel(this)">
+      <span class="chev">▾</span>
+      <h2>Business Glossary &amp; Entity Discovery</h2>
+      <div class="panel-sum" id="glossary-sum"></div>
+    </div>
+    <div class="panel-body">
+      <input type="text" id="glossary-search" placeholder="Search terms and entities..."
+             style="width:100%;padding:8px 12px;border:1px solid var(--border-strong);border-radius:6px;
+                    background:var(--nav-3);color:var(--text);font-family:var(--font);font-size:13px;
+                    margin-bottom:16px;outline:none;">
+      <div id="glossary-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;"></div>
+    </div>
+  </div>
+
 </main>
 
 <script>
@@ -328,6 +381,106 @@ if (!D.recent_changes.length) {
   cBody.insertAdjacentHTML('beforeend', `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:20px;">No change events in period</td></tr>`);
 }
 cSumEl.textContent = `${D.recent_changes.length} events`;
+
+// ---- Panel 2: Data Freshness -----------------------------------------------
+const fMetrics = document.getElementById('freshness-metrics');
+const fBody = document.querySelector('#freshness-table tbody');
+const fSumEl = document.getElementById('freshness-sum');
+const fs = D.freshness_summary;
+[
+  {lbl:'Total Flows', val: fmt(fs.total), cls:''},
+  {lbl:'Fresh (<24h)', val: fmt(fs.fresh), cls: fs.fresh > 0 ? 'green' : 'grey'},
+  {lbl:'Stale (24–48h)', val: fmt(fs.stale), cls: fs.stale > 0 ? 'amber' : 'grey'},
+  {lbl:'Critical (>48h)', val: fmt(fs.critical), cls: fs.critical > 0 ? 'red' : 'grey'},
+].forEach(m => {
+  fMetrics.insertAdjacentHTML('beforeend',
+    `<div class="mcard ${m.cls}"><div class="lbl">${m.lbl}</div><div class="val">${m.val}</div></div>`);
+});
+D.freshness_rows.forEach(r => {
+  const fcls = {FRESH:'green', STALE:'amber', CRITICAL:'red'}[r.freshness_status] || 'grey';
+  fBody.insertAdjacentHTML('beforeend',
+    `<tr>
+       <td style="color:var(--text);">${r.job}</td>
+       <td>${badge(r.freshness_status, fcls)} <span style="font-size:11px;color:var(--text-dim);">${r.freshness_hours}h ago</span></td>
+       <td style="color:var(--text-dim);">${fmtDts(r.run_dts)}</td>
+       <td>${statusBadge(r.run_status)}</td>
+       <td style="text-align:right;">${r.duration_ms != null ? (r.duration_ms/1000).toFixed(1)+'s' : '—'}</td>
+       <td style="text-align:right;">${fmt(r.records_written)}</td>
+     </tr>`);
+});
+if (!D.freshness_rows.length) {
+  fBody.insertAdjacentHTML('beforeend', `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:20px;">No lineage runs in period</td></tr>`);
+}
+fSumEl.innerHTML = `${badge(fs.fresh + ' fresh', 'green')} ${badge(fs.stale + ' stale', 'amber')} ${badge(fs.critical + ' critical', 'red')}`;
+
+// ---- Panel 8: Changes & Decisions ------------------------------------------
+const clBody = document.querySelector('#changelog-table tbody');
+const ddBody = document.querySelector('#decisions-table tbody');
+const decSumEl = document.getElementById('decisions-sum');
+D.change_log.forEach(c => {
+  clBody.insertAdjacentHTML('beforeend',
+    `<tr>
+       <td class="mono">${c.change_id}</td>
+       <td style="font-weight:600;">${c.version}</td>
+       <td style="font-size:12px;max-width:300px;">${c.title}</td>
+       <td style="font-size:11px;color:var(--text-dim);">${c.type}</td>
+       <td><span class="badge grey">${c.module}</span></td>
+       <td>${statusBadge(c.status)}</td>
+       <td style="font-size:11px;color:var(--text-dim);">${c.deployed_date || '—'}</td>
+     </tr>`);
+});
+if (!D.change_log.length) {
+  clBody.insertAdjacentHTML('beforeend', `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:16px;">No change log entries</td></tr>`);
+}
+D.design_decisions.forEach(d => {
+  ddBody.insertAdjacentHTML('beforeend',
+    `<tr>
+       <td class="mono">${d.decision_id}</td>
+       <td style="font-size:12px;max-width:260px;">${d.title}</td>
+       <td style="font-size:11px;color:var(--text-dim);">${d.category}</td>
+       <td><span class="badge grey">${d.module}</span></td>
+       <td>${statusBadge(d.status)}</td>
+       <td style="font-size:11px;color:var(--text-dim);">${d.decided_by || '—'}</td>
+       <td style="font-size:11px;color:var(--text-dim);">${d.decided_date || '—'}</td>
+     </tr>`);
+});
+if (!D.design_decisions.length) {
+  ddBody.insertAdjacentHTML('beforeend', `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:16px;">No design decisions</td></tr>`);
+}
+decSumEl.textContent = `${D.change_log.length} changes · ${D.design_decisions.length} decisions`;
+
+// ---- Panel 9: Business Glossary & Discovery --------------------------------
+const glossaryCards = document.getElementById('glossary-cards');
+const glossarySumEl = document.getElementById('glossary-sum');
+const glossarySearch = document.getElementById('glossary-search');
+const allGlossItems = [
+  ...D.glossary.map(g => ({type:'term', ...g})),
+  ...D.entities.map(e => ({type:'entity', term:e.name, definition:e.description||'', category:'ENTITY', context:e.database+'.'+e.table, module:e.module})),
+];
+function renderGlossary(filter) {
+  const q = (filter || '').toLowerCase();
+  glossaryCards.innerHTML = '';
+  allGlossItems
+    .filter(g => !q || g.term?.toLowerCase().includes(q) || g.definition?.toLowerCase().includes(q))
+    .forEach(g => {
+      const cls = g.type === 'entity' ? 'purple' : 'blue';
+      glossaryCards.insertAdjacentHTML('beforeend',
+        `<div class="mcard" style="cursor:default;">
+           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+             <span class="badge ${cls}">${g.category}</span>
+             <span style="font-weight:600;font-size:13px;">${g.term}</span>
+           </div>
+           <div style="font-size:12px;color:var(--text-dim);line-height:1.45;margin-bottom:6px;">${g.definition || '—'}</div>
+           ${g.context ? `<div style="font-size:11px;color:var(--orange);font-family:Menlo,monospace;">${g.context}</div>` : ''}
+         </div>`);
+    });
+  if (!glossaryCards.children.length) {
+    glossaryCards.innerHTML = `<p style="color:var(--text-dim);font-size:13px;">No results.</p>`;
+  }
+}
+glossarySearch.addEventListener('input', e => renderGlossary(e.target.value));
+renderGlossary('');
+glossarySumEl.textContent = `${D.glossary.length} terms · ${D.entities.length} entities`;
 </script>
 </body>
 </html>

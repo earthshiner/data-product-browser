@@ -45,10 +45,21 @@ def _build_context(dp: DataProduct) -> dict:
     enriched_recipes = []
     for r in dp.recipes:
         tables_in_sql = _extract_table_names(r.sql_template, dp.product_name)
+        # Filter relationships to only those between tables in this recipe
+        recipe_tables_upper = {t.upper() for t in tables_in_sql}
+        recipe_rels = [
+            rel for rel in dp.relationships
+            if rel.from_table.upper() in recipe_tables_upper
+            and rel.to_table.upper() in recipe_tables_upper
+        ]
         enriched_recipes.append({
             "recipe": r,
             "sql_html": highlight_sql(r.sql_template),
-            "join_diagram": make_join_diagram(tables_in_sql),
+            "join_diagram": make_join_diagram(
+                tables_in_sql,
+                relationships=recipe_rels,
+                entities=dp.entities,
+            ),
             "column_erd": make_column_erd(
                 tables_in_sql,
                 dp.columns,

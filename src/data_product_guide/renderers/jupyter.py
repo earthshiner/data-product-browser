@@ -3,49 +3,92 @@
 Produces both:
   - Python code block (for inline display in the cookbook HTML)
   - A downloadable .ipynb JSON (embedded as a base64 data URI)
+
+Format follows the spec in cookbook-html-format.md and query-patterns.md:
+  - teradatasql cursor pattern (not pd.read_sql) for bind parameter support
+  - logmech='LDAP' in connection
+  - run_query() helper in Cell 1
+  - Bind parameters detected and documented
 """
 
 from __future__ import annotations
 
 import base64
-import html
 import json
+import re
 
 from ..models import Recipe
 
 
-_CONN_BOILERPLATE = """\
-import pandas as pd
-import teradatasql
+_BIND_RE = re.compile(r":([A-Za-z_][A-Za-z0-9_]*)")
 
-# --- Connection (replace placeholders with your environment values) ---
+
+def _detect_params(sql: str) -> list[str]:
+    """Return unique bind parameter names found in the SQL."""
+    seen: list[str] = []
+    for m in _BIND_RE.finditer(sql):
+        name = m.group(1)
+        if name not in seen:
+            seen.append(name)
+    return seen
+
+
+_CONN_CELL = """\
+import teradatasql
+import pandas as pd
+
+# ─── Connection ──────────────────────────────────────────────────────────────
+# Replace placeholders with your environment values
 conn = teradatasql.connect(
-    host='<your_teradata_host>',
-    user='<your_username>',
+    host='<your_host>',
+    user='<your_user>',
     password='<your_password>',
+    logmech='LDAP',
 )
+
+def run_query(sql, params=None):
+    \"\"\"Execute a Teradata SQL query and return a DataFrame.\"\"\"
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        cols = [d[0] for d in cur.description]
+    return pd.DataFrame(rows, columns=cols)
 """
 
 
 def make_python_code(recipe: Recipe) -> str:
     """Return the Python source to display in the cookbook HTML code block."""
-    bar = "=" * (60 - len(recipe.recipe_id) - 2)
+    sep = "─" * max(0, 72 - len(recipe.recipe_id) - len(recipe.recipe_title) - 4)
     header = (
-        f"# === {recipe.recipe_title} ({recipe.recipe_id}) {bar}\n"
+        f"# ─── {recipe.recipe_id}: {recipe.recipe_title} {sep}\n"
         f"# Use case  : {recipe.use_case}\n"
         f"# Complexity: {recipe.complexity}  ·  Module: {recipe.source_module}\n"
     )
     if recipe.performance_notes:
         header += f"# Performance: {recipe.performance_notes}\n"
 
-    sql_block = (
-        f"\n{_CONN_BOILERPLATE}\n"
-        f"# --- SQL ---\n"
-        f"sql = '''\n{recipe.sql_template.strip()}\n'''\n\n"
-        f"df = pd.read_sql(sql, conn)\n"
+    params = _detect_params(recipe.sql_template)
+    param_block = ""
+    if params:
+        lines = ["params = {\n"]
+        for p in params:
+            lines.append(f"    '{p}': '<value>',  # Replace with actual value\n")
+        lines.append("}\n")
+        param_block = "\n" + "".join(lines)
+
+    run_call = (
+        "df = run_query(sql, params)" if params else "df = run_query(sql)"
+    )
+
+    body = (
+        f"\n{_CONN_CELL}\n\n"
+        f"# ─── Query ──────────────────────────────────────────────────────────────────\n"
+        f"sql = '''\n{recipe.sql_template.strip()}\n'''\n"
+        f"{param_block}\n"
+        f"{run_call}\n"
         f"df\n"
     )
-    return header + sql_block
+    return header + body
 
 
 def make_notebook(recipe: Recipe, product_name: str) -> dict:
@@ -67,6 +110,8 @@ def make_notebook(recipe: Recipe, product_name: str) -> dict:
             "source": source.splitlines(keepends=True),
         }
 
+    params = _detect_params(recipe.sql_template)
+
     title_md = (
         f"# {recipe.recipe_title}\n\n"
         f"**Product:** {product_name}  \n"
@@ -81,24 +126,20 @@ def make_notebook(recipe: Recipe, product_name: str) -> dict:
     if recipe.performance_notes:
         title_md += f"\n> **Performance note:** {recipe.performance_notes}\n"
 
-    conn_code = (
-        "import pandas as pd\n"
-        "import teradatasql\n"
-        "\n"
-        "# Replace placeholders with your environment values\n"
-        "conn = teradatasql.connect(\n"
-        "    host='<your_teradata_host>',\n"
-        "    user='<your_username>',\n"
-        "    password='<your_password>',\n"
-        ")\n"
-    )
-
-    sql_code = (
-        f"sql = '''\n{recipe.sql_template.strip()}\n'''\n"
-        "\n"
-        "df = pd.read_sql(sql, conn)\n"
-        "df\n"
-    )
+    query_lines = [
+        f"# ─── {recipe.recipe_id}: {recipe.recipe_title}\n",
+        f"# Source: {product_name}_Memory.Query_Cookbook\n\n",
+        f"sql = '''\n{recipe.sql_template.strip()}\n'''\n",
+    ]
+    if params:
+        query_lines.append("\nparams = {\n")
+        for p in params:
+            query_lines.append(f"    '{p}': '<value>',  # Replace with actual value\n")
+        query_lines.append("}\n")
+        query_lines.append("\ndf = run_query(sql, params)\n")
+    else:
+        query_lines.append("\ndf = run_query(sql)\n")
+    query_lines.append("df\n")
 
     return {
         "nbformat": 4,
@@ -113,8 +154,8 @@ def make_notebook(recipe: Recipe, product_name: str) -> dict:
         },
         "cells": [
             md_cell(title_md),
-            code_cell(conn_code),
-            code_cell(sql_code),
+            code_cell(_CONN_CELL),
+            code_cell("".join(query_lines)),
         ],
     }
 
