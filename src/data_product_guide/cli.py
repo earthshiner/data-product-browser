@@ -120,8 +120,12 @@ def store_password():
         _abort("The 'keyring' package is not installed. Run: uv sync")
 
     load_dotenv()
-    host = os.environ.get("TD_HOST") or typer.prompt("Teradata host")
-    user = os.environ.get("TD_USER") or typer.prompt("Teradata user")
+    host = typer.prompt("Teradata host", default=os.environ.get("TD_HOST", ""))
+    user = typer.prompt("Teradata user", default=os.environ.get("TD_USER", ""))
+    if not host:
+        _abort("Host is required.")
+    if not user:
+        _abort("User is required.")
     pwd = getpass.getpass(f"Password for {user}@{host}: ")
 
     try:
