@@ -283,8 +283,26 @@ body { margin: 0; font-family: 'Inter', -apple-system, sans-serif; background: v
         {% endif %}
       </div>
 
-      <div class="code-label">Python · teradatasql + pandas</div>
-      <pre class="code-block"><code>{{ item.jupyter_code | e }}</code></pre>
+      <div class="sub-tabs">
+        <button class="sub-tab active" data-target="jup-code-{{ r.recipe_id }}">Code</button>
+        <button class="sub-tab" data-target="jup-join-{{ r.recipe_id }}">Join Diagram</button>
+        {% if item.column_erd %}<button class="sub-tab" data-target="jup-erd-{{ r.recipe_id }}">Column ERD</button>{% endif %}
+      </div>
+
+      <div id="jup-code-{{ r.recipe_id }}" class="sub-panel active">
+        <div class="code-label">Python · teradatasql + pandas</div>
+        <pre class="code-block"><code>{{ item.jupyter_code | e }}</code></pre>
+      </div>
+
+      <div id="jup-join-{{ r.recipe_id }}" class="sub-panel">
+        <div class="diagram-container">{{ item.join_diagram }}</div>
+      </div>
+
+      {% if item.column_erd %}
+      <div id="jup-erd-{{ r.recipe_id }}" class="sub-panel">
+        <div class="diagram-container" style="overflow-x:auto;">{{ item.column_erd }}</div>
+      </div>
+      {% endif %}
     </details>
     {% else %}
     <p style="color:var(--text-sec);font-size:13px;">No recipes found.</p>

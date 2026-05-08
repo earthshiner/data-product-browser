@@ -47,8 +47,9 @@ class _Table:
         return _HDR_H + len(self.cols) * _COL_H
 
     def col_y_centre(self, col_name: str, table_top_y: int) -> int | None:
+        col_upper = col_name.upper()
         for i, c in enumerate(self.cols):
-            if c.name == col_name:
+            if c.name.upper() == col_upper:
                 return table_top_y + _HDR_H + i * _COL_H + _COL_H // 2
         return None
 
@@ -63,21 +64,22 @@ def _build_tables(
     relationships: list[TableRelationship],
     entities: list[EntityMetadata],
 ) -> list[_Table]:
+    # All lookups are case-insensitive — Teradata returns names in varying case
     join_cols: dict[str, set[str]] = {}
     for r in relationships:
         if r.is_active:
-            join_cols.setdefault(r.from_table, set()).add(r.from_column)
-            join_cols.setdefault(r.to_table, set()).add(r.to_column)
+            join_cols.setdefault(r.from_table.upper(), set()).add(r.from_column.upper())
+            join_cols.setdefault(r.to_table.upper(), set()).add(r.to_column.upper())
 
     natural_keys: dict[str, set[str]] = {}
     for e in entities:
         if e.natural_key_column:
-            natural_keys.setdefault(e.table_name, set()).add(e.natural_key_column)
+            natural_keys.setdefault(e.table_name.upper(), set()).add(e.natural_key_column.upper())
 
     tables = []
     for i, tname in enumerate(table_names):
         short = _short(tname)
-        cols_for = [c for c in columns if c.table_name == short]
+        cols_for = [c for c in columns if c.table_name.upper() == short.upper()]
         if not cols_for:
             continue
 
@@ -88,8 +90,8 @@ def _build_tables(
                 is_required=bool(c.is_required),
                 is_pii=bool(c.is_pii),
                 is_sensitive=bool(c.is_sensitive),
-                is_join=c.column_name in join_cols.get(short, set()),
-                is_key=c.column_name in natural_keys.get(short, set()),
+                is_join=c.column_name.upper() in join_cols.get(short.upper(), set()),
+                is_key=c.column_name.upper() in natural_keys.get(short.upper(), set()),
             )
             for c in cols_for
         ]
@@ -202,31 +204,45 @@ def _render_connectors(
     relationships: list[TableRelationship],
     parts: list[str],
 ) -> None:
-    table_index = {t.short_name: i for i, t in enumerate(tables)}
+    # Case-insensitive lookup so Teradata mixed-case names always match
+    table_index = {t.short_name.upper(): i for i, t in enumerate(tables)}
+    drawn: set[tuple] = set()
 
     for r in relationships:
         if not r.is_active:
             continue
-        li = table_index.get(r.from_table)
-        ri = table_index.get(r.to_table)
-        if li is None or ri is None or li >= ri:
+        ai = table_index.get(r.from_table.upper())
+        bi = table_index.get(r.to_table.upper())
+        if ai is None or bi is None or ai == bi:
             continue
+
+        # Deduplicate — one edge per table pair
+        edge_key = (min(ai, bi), max(ai, bi))
+        if edge_key in drawn:
+            continue
+        drawn.add(edge_key)
+
+        # Always draw left-to-right regardless of relationship direction
+        if ai <= bi:
+            li, ri = ai, bi
+            from_col, to_col = r.from_column, r.to_column
+        else:
+            li, ri = bi, ai
+            from_col, to_col = r.to_column, r.from_column
 
         lt = tables[li]
         rt = tables[ri]
-        lx = xs[li]
-        rx = xs[ri]
 
-        ly = lt.col_y_centre(r.from_column, _TOP_Y)
-        ry = rt.col_y_centre(r.to_column, _TOP_Y)
-        if ly is None or ry is None:
+        ly = lt.col_y_centre(from_col, _TOP_Y)
+        ry_val = rt.col_y_centre(to_col, _TOP_Y)
+        if ly is None or ry_val is None:
             continue
 
-        x1 = lx + _BOX_W
-        x2 = rx
+        x1 = xs[li] + _BOX_W
+        x2 = xs[ri]
         dashed = ' stroke-dasharray="6,4"' if r.join_type.upper() != "INNER" else ""
         parts.append(
-            f'<line x1="{x1}" y1="{ly}" x2="{x2}" y2="{ry}" '
+            f'<line x1="{x1}" y1="{ly}" x2="{x2}" y2="{ry_val}" '
             f'stroke="#FF5F02" stroke-width="1.5" marker-end="url(#erd-arrow)"{dashed}/>'
         )
 
