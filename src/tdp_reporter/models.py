@@ -22,8 +22,10 @@ class _Base(BaseModel):
 # Semantic module
 # ---------------------------------------------------------------------------
 
+
 class ProductMap(_Base):
     """MortgagePlatform_Semantic.data_product_map"""
+
     map_key: int
     module_name: str
     database_name: str
@@ -35,6 +37,7 @@ class ProductMap(_Base):
 
 class EntityMetadata(_Base):
     """MortgagePlatform_Semantic.entity_metadata"""
+
     entity_metadata_key: int
     module_name: str
     entity_name: str
@@ -51,6 +54,7 @@ class EntityMetadata(_Base):
 
 class ColumnMetadata(_Base):
     """MortgagePlatform_Semantic.column_metadata"""
+
     column_metadata_key: int
     database_name: str
     table_name: str
@@ -67,6 +71,7 @@ class ColumnMetadata(_Base):
 
 class TableRelationship(_Base):
     """MortgagePlatform_Semantic.table_relationship"""
+
     relationship_key: int
     from_database: str
     from_table: str
@@ -84,6 +89,7 @@ class TableRelationship(_Base):
 
 class NamingStandard(_Base):
     """MortgagePlatform_Semantic.naming_standard"""
+
     naming_standard_key: int
     standard_type: str
     pattern: str
@@ -96,8 +102,10 @@ class NamingStandard(_Base):
 # Memory module
 # ---------------------------------------------------------------------------
 
+
 class Recipe(_Base):
     """MortgagePlatform_Memory.Query_Cookbook"""
+
     recipe_key: int
     recipe_id: str
     recipe_title: str
@@ -119,6 +127,7 @@ class Recipe(_Base):
 
 class GlossaryTerm(_Base):
     """MortgagePlatform_Memory.Business_Glossary"""
+
     glossary_key: int
     term: str
     term_category: str
@@ -137,6 +146,7 @@ class GlossaryTerm(_Base):
 
 class DesignDecision(_Base):
     """MortgagePlatform_Memory.Design_Decision"""
+
     decision_key: int
     decision_id: str
     decision_version: int = 1
@@ -163,6 +173,7 @@ class DesignDecision(_Base):
 
 class ModuleRegistryEntry(_Base):
     """MortgagePlatform_Memory.Module_Registry"""
+
     module_registry_key: int
     module_name: str
     database_name: str
@@ -185,6 +196,7 @@ class ModuleRegistryEntry(_Base):
 
 class ImplementationNote(_Base):
     """MortgagePlatform_Memory.Implementation_Note"""
+
     note_key: int
     note_id: str
     note_title: str
@@ -205,6 +217,7 @@ class ImplementationNote(_Base):
 
 class ChangeLogEntry(_Base):
     """MortgagePlatform_Memory.Change_Log"""
+
     change_key: int
     change_id: str
     version_number: str
@@ -227,8 +240,10 @@ class ChangeLogEntry(_Base):
 # Observability module
 # ---------------------------------------------------------------------------
 
+
 class QualityMetric(_Base):
     """MortgagePlatform_Observability.data_quality_metric"""
+
     quality_metric_key: int
     database_name: str
     table_name: str
@@ -242,6 +257,7 @@ class QualityMetric(_Base):
 
 class LineageRun(_Base):
     """MortgagePlatform_Observability.lineage_run"""
+
     lineage_run_id: int
     lineage_id: int
     run_dts: datetime
@@ -259,6 +275,7 @@ class LineageRun(_Base):
 
 class AgentOutcome(_Base):
     """MortgagePlatform_Observability.agent_outcome"""
+
     outcome_key: int
     agent_type: str
     session_key: Optional[int] = None
@@ -275,6 +292,7 @@ class AgentOutcome(_Base):
 
 class ChangeEvent(_Base):
     """MortgagePlatform_Observability.change_event"""
+
     change_event_key: int
     event_dts: datetime
     database_name: str
@@ -288,9 +306,54 @@ class ChangeEvent(_Base):
     is_successful: int = 1
 
 
+class DataLineage(_Base):
+    """MortgagePlatform_Observability.data_lineage — registered ETL lineage edges."""
+
+    lineage_id: int
+    source_database: Optional[str] = None
+    source_table: Optional[str] = None
+    source_system: Optional[str] = None
+    target_database: Optional[str] = None
+    target_table: str
+    job_name: Optional[str] = None
+    transformation_type: Optional[str] = None
+    transformation_logic: Optional[str] = None
+    openlineage_job_name: Optional[str] = None
+    openlineage_namespace: Optional[str] = None
+    is_active: int = 1
+    registered_dts: Optional[datetime] = None
+    retired_dts: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+
+class LineageGraphEdge(_Base):
+    """MortgagePlatform_Semantic.lineage_graph — flattened graph edges (view output).
+
+    Each row is one directed edge: source object → job → target object.
+    The view produces two rows per data_lineage entry (ETL_INPUT + ETL_OUTPUT),
+    giving a complete source-job-target triple when read together by lineage_id.
+    """
+
+    src_object_name_fq: str
+    src_container_name: str
+    src_object_name: str
+    src_kind: str
+    src_display_name: str
+    edge_relationship: str          # 'ETL_INPUT' | 'ETL_OUTPUT'
+    transformation_type: Optional[str] = None
+    transformation_logic: Optional[str] = None
+    lineage_id: int
+    tgt_object_name_fq: str
+    tgt_container_name: str
+    tgt_object_name: str
+    tgt_kind: str
+    tgt_display_name: str
+
+
 # ---------------------------------------------------------------------------
 # Top-level aggregate
 # ---------------------------------------------------------------------------
+
 
 class DataProduct(_Base):
     """Complete snapshot of one AI-Native Data Product, ready for rendering."""
@@ -318,3 +381,7 @@ class DataProduct(_Base):
     lineage_runs: list[LineageRun] = []
     agent_outcomes: list[AgentOutcome] = []
     change_events: list[ChangeEvent] = []
+    data_lineage: list[DataLineage] = []
+
+    # Semantic (view over Observability)
+    lineage_graph: list[LineageGraphEdge] = []

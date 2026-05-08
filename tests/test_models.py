@@ -13,9 +13,11 @@ import pytest
 
 from tdp_reporter.models import (
     ColumnMetadata,
+    DataLineage,
     DataProduct,
     EntityMetadata,
     GlossaryTerm,
+    LineageGraphEdge,
     ModuleRegistryEntry,
     ProductMap,
     Recipe,
@@ -145,6 +147,50 @@ def _minimal_product() -> DataProduct:
 # ---------------------------------------------------------------------------
 # Model tests
 # ---------------------------------------------------------------------------
+
+class TestLineageModels:
+    def test_data_lineage_minimal(self):
+        dl = DataLineage(
+            lineage_id=1,
+            target_table="fact_loan",
+            job_name="load_fact_loan",
+            source_database="MortgagePlatform_Staging",
+            source_table="stg_loan",
+            target_database="MortgagePlatform_Domain",
+            transformation_type="FULL_LOAD",
+        )
+        assert dl.lineage_id == 1
+        assert dl.is_active == 1
+        assert dl.source_system is None
+
+    def test_lineage_graph_edge(self):
+        edge = LineageGraphEdge(
+            src_object_name_fq="MortgagePlatform_Staging.stg_loan",
+            src_container_name="MortgagePlatform_Staging",
+            src_object_name="stg_loan",
+            src_kind="Table",
+            src_display_name="MortgagePlatform_Staging.stg_loan\n [Table]",
+            edge_relationship="ETL_INPUT",
+            transformation_type="FULL_LOAD",
+            lineage_id=1,
+            tgt_object_name_fq="load_fact_loan",
+            tgt_container_name="",
+            tgt_object_name="load_fact_loan",
+            tgt_kind="Job",
+            tgt_display_name="load_fact_loan\n [Job]",
+        )
+        assert edge.edge_relationship == "ETL_INPUT"
+        assert edge.src_kind == "Table"
+
+    def test_data_product_includes_lineage_fields(self):
+        from datetime import datetime, timezone
+        dp = DataProduct(
+            product_name="X",
+            generated_at=datetime.now(timezone.utc),
+        )
+        assert dp.data_lineage == []
+        assert dp.lineage_graph == []
+
 
 class TestDataProductModel:
     def test_round_trip_json(self):

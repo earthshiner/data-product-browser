@@ -15,11 +15,13 @@ from .models import (
     ChangeEvent,
     ChangeLogEntry,
     ColumnMetadata,
+    DataLineage,
     DataProduct,
     DesignDecision,
     EntityMetadata,
     GlossaryTerm,
     ImplementationNote,
+    LineageGraphEdge,
     LineageRun,
     ModuleRegistryEntry,
     NamingStandard,
@@ -52,27 +54,18 @@ def collect(
     obs = f"{product_name}_Observability"
 
     with connection.cursor() as cur:
-
         # --- Semantic -------------------------------------------------------
 
-        cur.execute(
-            f"SELECT * FROM {sem}.data_product_map WHERE is_active = 1"
-        )
+        cur.execute(f"SELECT * FROM {sem}.data_product_map WHERE is_active = 1")
         modules = _rows(cur, ProductMap)
 
-        cur.execute(
-            f"SELECT * FROM {sem}.entity_metadata WHERE is_active = 1"
-        )
+        cur.execute(f"SELECT * FROM {sem}.entity_metadata WHERE is_active = 1")
         entities = _rows(cur, EntityMetadata)
 
-        cur.execute(
-            f"SELECT * FROM {sem}.column_metadata WHERE is_active = 1"
-        )
+        cur.execute(f"SELECT * FROM {sem}.column_metadata WHERE is_active = 1")
         columns = _rows(cur, ColumnMetadata)
 
-        cur.execute(
-            f"SELECT * FROM {sem}.table_relationship WHERE is_active = 1"
-        )
+        cur.execute(f"SELECT * FROM {sem}.table_relationship WHERE is_active = 1")
         relationships = _rows(cur, TableRelationship)
 
         cur.execute(
@@ -158,6 +151,22 @@ def collect(
         """)
         change_events = _rows(cur, ChangeEvent)
 
+        cur.execute(f"""
+            SELECT * FROM {obs}.data_lineage
+            WHERE is_active = 1
+            ORDER BY lineage_id
+        """)
+        data_lineage = _rows(cur, DataLineage)
+
+        # lineage_graph is a Semantic view over Observability.data_lineage.
+        # It expands each lineage row into two directed edges (ETL_INPUT + ETL_OUTPUT),
+        # enabling graph traversal without joining the underlying table.
+        cur.execute(f"""
+            SELECT * FROM {sem}.lineage_graph
+            ORDER BY lineage_id, edge_relationship
+        """)
+        lineage_graph = _rows(cur, LineageGraphEdge)
+
     return DataProduct(
         product_name=product_name,
         generated_at=datetime.now(timezone.utc),
@@ -176,4 +185,6 @@ def collect(
         lineage_runs=lineage_runs,
         agent_outcomes=agent_outcomes,
         change_events=change_events,
+        data_lineage=data_lineage,
+        lineage_graph=lineage_graph,
     )
