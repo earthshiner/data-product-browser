@@ -6,17 +6,30 @@ self-contained and requires no network access to display.
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
-from itertools import groupby
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
 from ..models import DataProduct
+from .erd import make_column_erd
+from .jupyter import make_python_code, notebook_data_uri
 from .sql_highlight import highlight_sql
 from .svg import make_join_diagram
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+
+def _extract_table_names(sql: str, product_name: str) -> list[str]:
+    """Return unique short table names referenced in the SQL."""
+    pattern = re.compile(rf"{re.escape(product_name)}_\w+\.(\w+)", re.IGNORECASE)
+    seen: list[str] = []
+    for m in pattern.finditer(sql):
+        name = m.group(1)
+        if name not in seen:
+            seen.append(name)
+    return seen
 
 
 def _build_context(dp: DataProduct) -> dict:
@@ -28,18 +41,24 @@ def _build_context(dp: DataProduct) -> dict:
         key = f"{col.database_name}.{col.table_name}"
         cols_by_table[key].append(col)
 
-    # Enrich each recipe with highlighted SQL and a join diagram
+    # Enrich each recipe with SQL, Jupyter, join diagram, and column ERD
     enriched_recipes = []
     for r in dp.recipes:
-        # Derive the tables touched by this recipe from the SQL (simple heuristic)
-        tables_in_sql = _extract_table_names(r.sql_template, r.source_module, dp.product_name)
-        enriched_recipes.append(
-            {
-                "recipe": r,
-                "sql_html": highlight_sql(r.sql_template),
-                "join_diagram": make_join_diagram(tables_in_sql),
-            }
-        )
+        tables_in_sql = _extract_table_names(r.sql_template, dp.product_name)
+        enriched_recipes.append({
+            "recipe": r,
+            "sql_html": highlight_sql(r.sql_template),
+            "join_diagram": make_join_diagram(tables_in_sql),
+            "column_erd": make_column_erd(
+                tables_in_sql,
+                dp.columns,
+                dp.relationships,
+                dp.entities,
+            ),
+            "jupyter_code": make_python_code(r),
+            "notebook_uri": notebook_data_uri(r, dp.product_name),
+            "notebook_filename": f"{r.recipe_id}.ipynb",
+        })
 
     # Group glossary by category
     glossary_by_cat: dict[str, list] = defaultdict(list)
@@ -51,7 +70,6 @@ def _build_context(dp: DataProduct) -> dict:
     for d in dp.decisions:
         decisions_by_cat[d.decision_category].append(d)
 
-    # Derive a product version from Module_Registry (most recent)
     version = "—"
     if dp.module_registry:
         latest = max(dp.module_registry, key=lambda m: m.version_date)
@@ -77,29 +95,12 @@ def _build_context(dp: DataProduct) -> dict:
     }
 
 
-def _extract_table_names(sql: str, source_module: str, product_name: str) -> list[str]:
-    """Heuristically extract unique table short-names referenced in the SQL."""
-    import re
-
-    pattern = re.compile(
-        rf"{re.escape(product_name)}_\w+\.(\w+)",
-        re.IGNORECASE,
-    )
-    seen: list[str] = []
-    for m in pattern.finditer(sql):
-        name = m.group(1)
-        if name not in seen:
-            seen.append(name)
-    return seen or [source_module]
-
-
 def render_cookbook(dp: DataProduct) -> str:
     """Return the complete Cookbook HTML string for the given DataProduct."""
     env = Environment(
         loader=FileSystemLoader(str(_TEMPLATES_DIR)),
-        autoescape=False,  # SQL/SVG content must not be escaped
+        autoescape=False,
     )
     env.filters["highlight_sql"] = highlight_sql
-
     template = env.get_template("cookbook.html.j2")
     return template.render(**_build_context(dp))

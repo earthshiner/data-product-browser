@@ -145,6 +145,7 @@ body { margin: 0; font-family: 'Inter', -apple-system, sans-serif; background: v
 
 <nav class="top-tabs">
   <button class="top-tab active" data-target="panel-sql">SQL Recipes</button>
+  <button class="top-tab" data-target="panel-jupyter">Jupyter Recipes</button>
   <button class="top-tab" data-target="panel-dict">Data Dictionary</button>
   <button class="top-tab" data-target="panel-glossary">Business Glossary</button>
   <button class="top-tab" data-target="panel-arch">Architecture</button>
@@ -206,6 +207,7 @@ body { margin: 0; font-family: 'Inter', -apple-system, sans-serif; background: v
       <div class="sub-tabs">
         <button class="sub-tab active" data-target="code-{{ r.recipe_id }}">Code</button>
         <button class="sub-tab" data-target="join-{{ r.recipe_id }}">Join Diagram</button>
+        {% if item.column_erd %}<button class="sub-tab" data-target="erd-{{ r.recipe_id }}">Column ERD</button>{% endif %}
       </div>
 
       <div id="code-{{ r.recipe_id }}" class="sub-panel active">
@@ -216,9 +218,76 @@ body { margin: 0; font-family: 'Inter', -apple-system, sans-serif; background: v
       <div id="join-{{ r.recipe_id }}" class="sub-panel">
         <div class="diagram-container">{{ item.join_diagram }}</div>
       </div>
+
+      {% if item.column_erd %}
+      <div id="erd-{{ r.recipe_id }}" class="sub-panel">
+        <div class="diagram-container" style="overflow-x:auto;">{{ item.column_erd }}</div>
+      </div>
+      {% endif %}
     </details>
     {% else %}
     <p style="color:var(--text-sec);font-size:13px;">No active recipes found in {{ product_name }}_Memory.Query_Cookbook.</p>
+    {% endfor %}
+  </section>
+
+  <!-- ===== Jupyter Recipes ===== -->
+  <section id="panel-jupyter" class="tab-panel">
+    <div class="section-intro">
+      Each SQL recipe wrapped as a runnable Jupyter cell using
+      <code>teradatasql</code> with a pandas <code>DataFrame</code> result.
+      Replace the <code>&lt;your_*&gt;</code> connection placeholders with your
+      environment values. Click <strong>Download .ipynb</strong> to open directly
+      in Jupyter or VS Code.
+    </div>
+
+    {% for item in enriched_recipes %}
+    {% set r = item.recipe %}
+    <details class="recipe-card" {% if loop.first %}open{% endif %}>
+      <summary class="recipe-header">
+        <span class="recipe-id">{{ r.recipe_id }}</span>
+        <span class="recipe-title">{{ r.recipe_title }}</span>
+        <span class="badges">
+          <span class="badge module">{{ r.source_module }}</span>
+          <span class="badge complexity-{{ r.complexity }}">{{ r.complexity }}</span>
+        </span>
+      </summary>
+
+      <div class="recipe-question">
+        <span class="icon">❓</span>
+        <div class="content">
+          <div class="label">Business question</div>
+          <div class="text">{{ r.use_case }}</div>
+        </div>
+      </div>
+
+      {% if r.recipe_description %}
+      <div class="recipe-context">
+        <span class="icon">📊</span>
+        <div class="content">
+          <div class="label">Context</div>
+          <div class="text">{{ r.recipe_description }}</div>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="recipe-meta">
+        <div class="meta-row">
+          <span class="meta-label">Download:</span>
+          <a href="{{ item.notebook_uri }}" download="{{ item.notebook_filename }}"
+             style="color:var(--orange);font-weight:600;font-size:12px;">
+            ⬇ {{ item.notebook_filename }}
+          </a>
+        </div>
+        {% if r.performance_notes %}
+        <div class="meta-row"><span class="meta-label">Performance:</span> {{ r.performance_notes }}</div>
+        {% endif %}
+      </div>
+
+      <div class="code-label">Python · teradatasql + pandas</div>
+      <pre class="code-block"><code>{{ item.jupyter_code | e }}</code></pre>
+    </details>
+    {% else %}
+    <p style="color:var(--text-sec);font-size:13px;">No recipes found.</p>
     {% endfor %}
   </section>
 
