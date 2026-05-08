@@ -1,4 +1,4 @@
-"""Smoke tests for models, renderers, and SQL highlighter.
+"""Smoke tests for models, renderers, SQL highlighter, and error handling.
 
 These tests run without a Teradata connection by using a minimal fixture.
 Run with:  uv run pytest
@@ -291,3 +291,71 @@ class TestRenderers:
         assert match, "Could not find __DATA__ assignment"
         parsed = json.loads(match.group(1))
         assert parsed["product_name"] == "TestProduct"
+
+
+# ---------------------------------------------------------------------------
+# Exception / error-handling tests
+# ---------------------------------------------------------------------------
+
+class TestExceptions:
+    def test_access_denied_message(self):
+        from data_product_guide.exceptions import AccessDeniedError
+        err = AccessDeniedError(
+            "MortgagePlatform_Semantic.data_product_map", "pd185014", "MortgagePlatform"
+        )
+        msg = str(err)
+        assert "No SELECT access" in msg
+        assert "GRANT SELECT ON MortgagePlatform_Semantic TO pd185014" in msg
+        assert "GRANT SELECT ON MortgagePlatform_Memory TO pd185014" in msg
+        assert "GRANT SELECT ON MortgagePlatform_Observability TO pd185014" in msg
+
+    def test_object_not_found_message(self):
+        from data_product_guide.exceptions import ObjectNotFoundError
+        err = ObjectNotFoundError("MortgagePlatform_Semantic.data_product_map", "MortgagePlatform")
+        msg = str(err)
+        assert "does not exist" in msg
+        assert "MortgagePlatform_Semantic.data_product_map" in msg
+
+    def test_login_error_message(self):
+        from data_product_guide.exceptions import LoginError
+        msg = str(LoginError())
+        assert "Login failed" in msg
+        assert "store-password" in msg
+
+    def test_snapshot_not_found_message(self):
+        from data_product_guide.exceptions import SnapshotNotFoundError
+        msg = str(SnapshotNotFoundError("./snapshots/test.json"))
+        assert "not found" in msg
+        assert "dump" in msg
+
+    def test_invalid_artefact_message(self):
+        from data_product_guide.exceptions import InvalidArtefactError
+        msg = str(InvalidArtefactError("badvalue"))
+        assert "badvalue" in msg
+        assert "all, cookbook, ops" in msg
+
+    def test_parse_3523_returns_access_denied(self):
+        from data_product_guide.exceptions import AccessDeniedError, parse_teradata_error
+
+        class FakeOpError(Exception):
+            pass
+        FakeOpError.__module__ = "teradatasql"
+
+        raw = FakeOpError(
+            "[Error 3523] The user does not have SELECT access to "
+            "'MortgagePlatform_Semantic.data_product_map'."
+        )
+        result = parse_teradata_error(raw, "MortgagePlatform", "pd185014", "tdhost")
+        assert isinstance(result, AccessDeniedError)
+        assert "MortgagePlatform_Semantic.data_product_map" in result.object_name
+
+    def test_parse_3807_returns_object_not_found(self):
+        from data_product_guide.exceptions import ObjectNotFoundError, parse_teradata_error
+
+        class FakeOpError(Exception):
+            pass
+        FakeOpError.__module__ = "teradatasql"
+
+        raw = FakeOpError("[Error 3807] Object 'MortgagePlatform_Semantic.foo' does not exist.")
+        result = parse_teradata_error(raw, "MortgagePlatform", "pd185014", "tdhost")
+        assert isinstance(result, ObjectNotFoundError)
