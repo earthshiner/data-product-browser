@@ -34,9 +34,25 @@ from .models import (
 )
 
 
+def _fix(value: Any) -> Any:
+    """Repair mojibake in string values (e.g. UTF-8 stored into a LATIN column).
+
+    Teradata LATIN-charset columns that contain UTF-8 bytes produce garbled
+    sequences like â€" (em-dash) or â€™ (curly quote). ftfy detects and
+    corrects these automatically without touching values that are already clean.
+    """
+    if isinstance(value, str):
+        import ftfy
+        return ftfy.fix_text(value)
+    return value
+
+
 def _rows(cursor: Any, model_class: type) -> list:
     cols = [d[0].lower() for d in cursor.description]
-    return [model_class(**dict(zip(cols, row))) for row in cursor.fetchall()]
+    return [
+        model_class(**{k: _fix(v) for k, v in zip(cols, row)})
+        for row in cursor.fetchall()
+    ]
 
 
 def _table_from_sql(sql: str) -> str:

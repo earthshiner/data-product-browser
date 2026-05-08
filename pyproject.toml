@@ -16,6 +16,7 @@ dependencies = [
     "typer[all]>=0.12",
     "python-dotenv>=1.0",
     "keyring>=25.0",
+    "ftfy>=6.0",
 ]
 
 [project.scripts]
