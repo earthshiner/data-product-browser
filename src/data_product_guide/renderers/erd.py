@@ -135,16 +135,28 @@ def _render_table(t: _Table, x: int, y: int, parts: list[str]) -> None:
             f'<rect x="{x}" y="{ry}" width="{_BOX_W}" height="{_COL_H}" fill="{bg}"/>'
         )
 
-        icon = ""
+        # PK/FK badge (text rect, no emoji — reliable across all browsers/SVG renderers)
+        badge_x = x + 6
+        name_x  = x + 10
         if col.is_key:
-            icon = "🔑 "
+            parts.append(
+                f'<rect x="{badge_x}" y="{ry + 5}" width="16" height="13" rx="2" fill="#0d9488"/>'
+                f'<text x="{badge_x + 8}" y="{ry + 15}" font-family="{_FONT}" font-size="7" '
+                f'font-weight="700" fill="#FFFFFF" text-anchor="middle">PK</text>'
+            )
+            name_x = badge_x + 20
         elif col.is_join:
-            icon = "🔗 "
+            parts.append(
+                f'<rect x="{badge_x}" y="{ry + 5}" width="16" height="13" rx="2" fill="#FF5F02"/>'
+                f'<text x="{badge_x + 8}" y="{ry + 15}" font-family="{_FONT}" font-size="7" '
+                f'font-weight="700" fill="#FFFFFF" text-anchor="middle">FK</text>'
+            )
+            name_x = badge_x + 20
 
         name_color = "#FF5F02" if col.is_join else "#00233C"
         parts.append(
-            f'<text x="{x + 10}" y="{cy}" font-family="{_FONT}" font-size="10" '
-            f'fill="{name_color}">{esc(icon + col.name)}</text>'
+            f'<text x="{name_x}" y="{cy}" font-family="{_FONT}" font-size="10" '
+            f'fill="{name_color}">{esc(col.name)}</text>'
         )
 
         # Data type (right-aligned, monospace)
@@ -154,7 +166,7 @@ def _render_table(t: _Table, x: int, y: int, parts: list[str]) -> None:
             f'fill="#FF5F02" text-anchor="end">{esc(col.data_type)}</text>'
         )
 
-        # Badges (NOT NULL, PII, SENSITIVE) — stack from right of name
+        # Attribute badges — stack left of the data type
         bx = x + 160
         if col.is_required:
             parts.append(
@@ -220,14 +232,48 @@ def _render_connectors(
 
 
 def _render_legend(y: int, parts: list[str]) -> None:
+    lx = 20
+    # PK badge
     parts.append(
-        f'<text x="20" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">'
-        f'🔑 PK/Natural key  ·  🔗 Join column  ·  '
-        f'<tspan fill="#6b7280" font-weight="700">NN</tspan>=NOT NULL  ·  '
-        f'<tspan fill="#dc2626" font-weight="700">PII</tspan>  ·  '
-        f'<tspan fill="#d97706" font-weight="700">SENS</tspan>=Sensitive'
-        f'</text>'
+        f'<rect x="{lx}" y="{y - 10}" width="16" height="13" rx="2" fill="#0d9488"/>'
+        f'<text x="{lx + 8}" y="{y}" font-family="{_FONT}" font-size="7" '
+        f'font-weight="700" fill="#FFFFFF" text-anchor="middle">PK</text>'
     )
+    lx += 22
+    parts.append(f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">Natural key</text>')
+    lx += 76
+    # FK badge
+    parts.append(
+        f'<rect x="{lx}" y="{y - 10}" width="16" height="13" rx="2" fill="#FF5F02"/>'
+        f'<text x="{lx + 8}" y="{y}" font-family="{_FONT}" font-size="7" '
+        f'font-weight="700" fill="#FFFFFF" text-anchor="middle">FK</text>'
+    )
+    lx += 22
+    parts.append(f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">Join column  ·  </text>')
+    lx += 82
+    parts.append(
+        f'<rect x="{lx}" y="{y - 10}" width="18" height="13" rx="3" fill="#6b7280"/>'
+        f'<text x="{lx + 9}" y="{y}" font-family="{_FONT}" font-size="8" '
+        f'font-weight="700" fill="#FFFFFF" text-anchor="middle">NN</text>'
+    )
+    lx += 24
+    parts.append(f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">=NOT NULL  ·  </text>')
+    lx += 78
+    parts.append(
+        f'<rect x="{lx}" y="{y - 10}" width="22" height="13" rx="3" fill="#dc2626"/>'
+        f'<text x="{lx + 11}" y="{y}" font-family="{_FONT}" font-size="8" '
+        f'font-weight="700" fill="#FFFFFF" text-anchor="middle">PII</text>'
+    )
+    lx += 28
+    parts.append(f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">  ·  </text>')
+    lx += 22
+    parts.append(
+        f'<rect x="{lx}" y="{y - 10}" width="30" height="13" rx="3" fill="#d97706"/>'
+        f'<text x="{lx + 15}" y="{y}" font-family="{_FONT}" font-size="8" '
+        f'font-weight="700" fill="#FFFFFF" text-anchor="middle">SENS</text>'
+    )
+    lx += 36
+    parts.append(f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">=Sensitive</text>')
 
 
 def make_column_erd(
@@ -249,7 +295,10 @@ def make_column_erd(
     xs = [20 + i * (_BOX_W + _GAP_X) for i in range(n)]
 
     parts: list[str] = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {total_w} {total_h}" '
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'width="{total_w}" height="{total_h}" '
+        f'viewBox="0 0 {total_w} {total_h}" '
+        f'style="max-width:100%;height:auto;" '
         f'role="img" aria-label="Column ERD: {html.escape(", ".join(t.short_name for t in built))}">',
         "<defs>",
         '<marker id="erd-arrow" viewBox="0 0 10 10" refX="9" refY="5" '
