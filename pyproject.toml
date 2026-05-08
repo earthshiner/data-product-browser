@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "tdp-reporter"
+name = "ai-native-data-product-guide"
 version = "0.1.0"
 description = "Generate AI-Native Data Product artefacts (Cookbook, Ops Dashboard) from Teradata metadata"
 readme = "README.md"
@@ -15,13 +15,14 @@ dependencies = [
     "pygments>=2.17",
     "typer[all]>=0.12",
     "python-dotenv>=1.0",
+    "keyring>=25.0",
 ]
 
 [project.scripts]
-tdp-reporter = "tdp_reporter.cli:main"
+data-product-guide = "data_product_guide.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/tdp_reporter"]
+packages = ["src/data_product_guide"]
 
 [dependency-groups]
 dev = [

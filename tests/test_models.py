@@ -11,7 +11,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from tdp_reporter.models import (
+from data_product_guide.models import (
     ColumnMetadata,
     DataLineage,
     DataProduct,
@@ -23,8 +23,8 @@ from tdp_reporter.models import (
     Recipe,
     TableRelationship,
 )
-from tdp_reporter.renderers.sql_highlight import highlight_sql
-from tdp_reporter.renderers.svg import make_join_diagram
+from data_product_guide.renderers.sql_highlight import highlight_sql
+from data_product_guide.renderers.svg import make_join_diagram
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +266,7 @@ class TestSvgDiagram:
 
 class TestRenderers:
     def test_cookbook_renders(self):
-        from tdp_reporter.renderers.cookbook import render_cookbook
+        from data_product_guide.renderers.cookbook import render_cookbook
         dp = _minimal_product()
         html = render_cookbook(dp)
         assert "TestProduct" in html
@@ -275,7 +275,7 @@ class TestRenderers:
         assert "borrower_name" in html
 
     def test_ops_dashboard_renders(self):
-        from tdp_reporter.renderers.ops_dashboard import render_ops_dashboard
+        from data_product_guide.renderers.ops_dashboard import render_ops_dashboard
         dp = _minimal_product()
         html = render_ops_dashboard(dp)
         assert "TestProduct" in html
@@ -284,7 +284,7 @@ class TestRenderers:
 
     def test_ops_data_is_valid_json(self):
         import re
-        from tdp_reporter.renderers.ops_dashboard import render_ops_dashboard
+        from data_product_guide.renderers.ops_dashboard import render_ops_dashboard
         dp = _minimal_product()
         html = render_ops_dashboard(dp)
         match = re.search(r"window\.__DATA__\s*=\s*(\{.*?\});", html, re.DOTALL)

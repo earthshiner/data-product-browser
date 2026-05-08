@@ -33,11 +33,13 @@ def _build_context(dp: DataProduct) -> dict:
     for r in dp.recipes:
         # Derive the tables touched by this recipe from the SQL (simple heuristic)
         tables_in_sql = _extract_table_names(r.sql_template, r.source_module, dp.product_name)
-        enriched_recipes.append({
-            "recipe": r,
-            "sql_html": highlight_sql(r.sql_template),
-            "join_diagram": make_join_diagram(tables_in_sql),
-        })
+        enriched_recipes.append(
+            {
+                "recipe": r,
+                "sql_html": highlight_sql(r.sql_template),
+                "join_diagram": make_join_diagram(tables_in_sql),
+            }
+        )
 
     # Group glossary by category
     glossary_by_cat: dict[str, list] = defaultdict(list)

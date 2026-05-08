@@ -339,7 +339,7 @@ class LineageGraphEdge(_Base):
     src_object_name: str
     src_kind: str
     src_display_name: str
-    edge_relationship: str          # 'ETL_INPUT' | 'ETL_OUTPUT'
+    edge_relationship: str  # 'ETL_INPUT' | 'ETL_OUTPUT'
     transformation_type: Optional[str] = None
     transformation_logic: Optional[str] = None
     lineage_id: int

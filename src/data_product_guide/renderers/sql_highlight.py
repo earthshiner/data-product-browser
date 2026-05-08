@@ -41,12 +41,12 @@ _FUNCTIONS = frozenset(
 )
 
 _TOKEN_RE = re.compile(
-    r"(--[^\n]*"            # line comment
-    r"|'(?:''|[^'])*'"      # single-quoted string
-    r"|\d+(?:\.\d+)?"       # number
-    r"|[A-Za-z_]\w*"        # identifier or keyword
-    r"|[^\w\s]"             # punctuation
-    r"|\s+"                 # whitespace
+    r"(--[^\n]*"  # line comment
+    r"|'(?:''|[^'])*'"  # single-quoted string
+    r"|\d+(?:\.\d+)?"  # number
+    r"|[A-Za-z_]\w*"  # identifier or keyword
+    r"|[^\w\s]"  # punctuation
+    r"|\s+"  # whitespace
     r")"
 )
 

@@ -37,12 +37,16 @@ def _build_data(dp: DataProduct) -> dict:
     failures_by_table: dict[str, list] = defaultdict(list)
     for m in dp.quality_metrics:
         if m.is_below_threshold:
-            failures_by_table[f"{m.database_name}.{m.table_name}"].append({
-                "metric": m.metric_name,
-                "value": float(m.metric_value) if m.metric_value is not None else None,
-                "threshold": float(m.threshold_value) if m.threshold_value is not None else None,
-                "measured_at": m.measured_at.isoformat(),
-            })
+            failures_by_table[f"{m.database_name}.{m.table_name}"].append(
+                {
+                    "metric": m.metric_name,
+                    "value": float(m.metric_value) if m.metric_value is not None else None,
+                    "threshold": float(m.threshold_value)
+                    if m.threshold_value is not None
+                    else None,
+                    "measured_at": m.measured_at.isoformat(),
+                }
+            )
 
     # --- Module status from Memory.Module_Registry ---------------------------
     modules_status = [
