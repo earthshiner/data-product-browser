@@ -124,7 +124,11 @@ class InvalidArtefactError(DataProductError):
 
 _TD_ERROR_RE = re.compile(r"\[Error\s+(\d+)\]")
 _OBJECT_RE = re.compile(
-    r"(?:access to|Object)\s+'?([A-Za-z0-9_]+\.[A-Za-z0-9_]+)'?",
+    r"(?:access to|Object)\s+'?([A-Za-z0-9_.]+)'?",
+    re.IGNORECASE,
+)
+_OWNER_OBJ_RE = re.compile(
+    r"SELECT WITH GRANT OPTION access to ([A-Za-z0-9_.]+)",
     re.IGNORECASE,
 )
 
@@ -134,8 +138,16 @@ def parse_teradata_error(
     product_name: str,
     user: str,
     host: str,
+    query_context: str = "",
 ) -> DataProductError:
-    """Convert a teradatasql OperationalError into a DataProductError."""
+    """Convert a teradatasql OperationalError into a DataProductError.
+
+    Args:
+        query_context: Short label for the query that was running when the error
+                       occurred, e.g. ``"MortgagePlatform_Semantic.lineage_graph"``.
+                       Included in the error message so the user knows exactly
+                       which step failed.
+    """
     msg = str(exc)
 
     code_match = _TD_ERROR_RE.search(msg)
@@ -144,16 +156,42 @@ def parse_teradata_error(
     obj_match = _OBJECT_RE.search(msg)
     obj = obj_match.group(1) if obj_match else "unknown object"
 
+    context_line = (
+        f"\n\n  Failed while querying: {query_context}" if query_context else ""
+    )
+
     if code == 3523:
         return AccessDeniedError(obj, user, product_name)
+
     if code == 3807:
         return ObjectNotFoundError(obj, product_name)
+
     if code in (8017, 1017):
         return LoginError()
+
+    if code == 5315:
+        # View owner lacks SELECT WITH GRANT OPTION on a DBC system table.
+        # Extract the specific object from the error message.
+        owner_match = _OWNER_OBJ_RE.search(msg)
+        dbc_obj = owner_match.group(1) if owner_match else "DBC.TablesV"
+        view_ref = query_context or "a view in this data product"
+        return DataProductError(
+            f"View permission error while querying '{view_ref}'.{context_line}\n\n"
+            f"  The view owner does not have SELECT WITH GRANT OPTION on '{dbc_obj}'.\n\n"
+            f"  Ask your Teradata DBA to run:\n\n"
+            f"    GRANT SELECT ON {dbc_obj} TO <view_owner> WITH GRANT OPTION;\n\n"
+            f"  The view owner is the database that owns '{view_ref}'.\n"
+            f"  To find it:  SELECT CreatorName FROM DBC.TablesV "
+            f"WHERE DatabaseName = '{product_name}_Semantic' "
+            f"AND TableName = 'lineage_graph';"
+        )
+
     if "unable to connect" in msg.lower() or "connection refused" in msg.lower():
         return ConnectionError(host)
 
-    # Unknown database error — wrap with context but keep the original message
+    # Unknown error — include the query context so the user knows where it failed
+    first_line = msg.splitlines()[0]
     return DataProductError(
-        f"Teradata error while querying '{product_name}':\n\n  {msg.splitlines()[0]}"
+        f"Teradata error while querying '{product_name}'.{context_line}\n\n"
+        f"  {first_line}"
     )

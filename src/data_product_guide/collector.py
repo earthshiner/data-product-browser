@@ -39,15 +39,51 @@ def _rows(cursor: Any, model_class: type) -> list:
     return [model_class(**dict(zip(cols, row))) for row in cursor.fetchall()]
 
 
+def _table_from_sql(sql: str) -> str:
+    """Extract the first fully-qualified table reference from a SQL string."""
+    import re
+    m = re.search(r"FROM\s+([A-Za-z0-9_]+\.[A-Za-z0-9_]+)", sql, re.IGNORECASE)
+    return m.group(1) if m else sql.strip().splitlines()[0][:60]
+
+
 def _run(cursor: Any, sql: str, model_class: type, product_name: str, user: str, host: str) -> list:
     """Execute one query and return typed rows, converting DB errors to friendly exceptions."""
     try:
         cursor.execute(sql)
         return _rows(cursor, model_class)
     except Exception as exc:
-        # Only re-wrap teradatasql errors; let unexpected exceptions propagate naturally
         if "teradatasql" in type(exc).__module__ or "OperationalError" in type(exc).__name__:
-            raise parse_teradata_error(exc, product_name, user, host) from None
+            raise parse_teradata_error(
+                exc, product_name, user, host,
+                query_context=_table_from_sql(sql),
+            ) from None
+        raise
+
+
+def _run_optional(
+    cursor: Any,
+    sql: str,
+    model_class: type,
+    product_name: str,
+    user: str,
+    host: str,
+    warn_label: str,
+) -> tuple[list, str | None]:
+    """Like _run, but on failure returns ([], warning_message) instead of raising.
+
+    Used for queries that depend on DBC system-table grants outside the
+    data product's control (e.g. lineage_graph → DBC.TablesV).
+    """
+    try:
+        cursor.execute(sql)
+        return _rows(cursor, model_class), None
+    except Exception as exc:
+        if "teradatasql" in type(exc).__module__ or "OperationalError" in type(exc).__name__:
+            friendly = parse_teradata_error(
+                exc, product_name, user, host,
+                query_context=_table_from_sql(sql),
+            )
+            return [], f"⚠  Skipped {warn_label}: {str(friendly)}"
         raise
 
 
@@ -55,8 +91,12 @@ def collect(
     product_name: str,
     connection: Any,
     lookback_days: int = 90,
-) -> DataProduct:
-    """Query all modules and return a fully populated DataProduct.
+) -> tuple[DataProduct, list[str]]:
+    """Query all modules and return a fully populated DataProduct plus any warnings.
+
+    Returns:
+        (DataProduct, warnings) where warnings is a list of non-fatal messages
+        for queries that were skipped due to insufficient DBC grants.
 
     Args:
         product_name:  Prefix used for all module databases, e.g. ``MortgagePlatform``.
@@ -71,8 +111,16 @@ def collect(
     user = os.environ.get("TD_USER", "unknown_user")
     host = os.environ.get("TD_HOST", "unknown_host")
 
+    warnings: list[str] = []
+
     def q(sql: str, model_class: type) -> list:
         return _run(cur, sql, model_class, product_name, user, host)
+
+    def q_opt(sql: str, model_class: type, label: str) -> list:
+        rows, warn = _run_optional(cur, sql, model_class, product_name, user, host, label)
+        if warn:
+            warnings.append(warn)
+        return rows
 
     with connection.cursor() as cur:
 
@@ -167,12 +215,14 @@ def collect(
             DataLineage,
         )
 
-        # lineage_graph is a Semantic view over Observability.data_lineage.
-        # It expands each lineage row into two directed edges (ETL_INPUT + ETL_OUTPUT),
-        # enabling graph traversal without joining the underlying table.
-        lineage_graph = q(
+        # lineage_graph JOINs DBC.TablesV to resolve object kinds. This requires
+        # the view owner to hold SELECT WITH GRANT OPTION on DBC.TablesV — a DBA
+        # privilege that may not be present. Treated as optional: failure produces
+        # a warning rather than aborting the whole collection run.
+        lineage_graph = q_opt(
             f"SELECT * FROM {sem}.lineage_graph ORDER BY lineage_id, edge_relationship",
             LineageGraphEdge,
+            label=f"{sem}.lineage_graph",
         )
 
     return DataProduct(
@@ -195,4 +245,4 @@ def collect(
         change_events=change_events,
         data_lineage=data_lineage,
         lineage_graph=lineage_graph,
-    )
+    ), warnings

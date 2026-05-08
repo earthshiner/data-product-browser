@@ -155,7 +155,7 @@ def generate(
 
     try:
         typer.echo(f"Collecting metadata for '{product}'…")
-        dp = collect(product, conn, lookback_days=lookback)
+        dp, warnings = collect(product, conn, lookback_days=lookback)
     except DataProductError as exc:
         _abort(str(exc))
     except Exception as exc:
@@ -167,6 +167,8 @@ def generate(
         f"  {len(dp.recipes)} recipes  |  {len(dp.entities)} entities  |  "
         f"{len(dp.glossary)} glossary terms  |  {len(dp.quality_metrics)} quality metrics"
     )
+    for w in warnings:
+        typer.echo(f"\n{w}", err=True)
 
     try:
         if artefact in ("all", "cookbook"):
@@ -200,13 +202,16 @@ def dump(
 
     try:
         typer.echo(f"Collecting metadata for '{product}'…")
-        dp = collect(product, conn, lookback_days=lookback)
+        dp, warnings = collect(product, conn, lookback_days=lookback)
     except DataProductError as exc:
         _abort(str(exc))
     except Exception as exc:
         _abort(f"Unexpected error while collecting metadata:\n\n  {exc}")
     finally:
         conn.close()
+
+    for w in warnings:
+        typer.echo(f"\n{w}", err=True)
 
     try:
         output.parent.mkdir(parents=True, exist_ok=True)
