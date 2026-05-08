@@ -127,8 +127,10 @@ _OBJECT_RE = re.compile(
     r"(?:access to|Object)\s+'?([A-Za-z0-9_.]+)'?",
     re.IGNORECASE,
 )
+# 5315 error text: "... access to DBC.TablesV.ColumnName."
+# Match only DatabaseName.TableName — stop before a third dot or trailing period.
 _OWNER_OBJ_RE = re.compile(
-    r"SELECT WITH GRANT OPTION access to ([A-Za-z0-9_.]+)",
+    r"SELECT WITH GRANT OPTION access to ([A-Za-z0-9_]+\.[A-Za-z0-9_]+)",
     re.IGNORECASE,
 )
 
@@ -139,14 +141,16 @@ def parse_teradata_error(
     user: str,
     host: str,
     query_context: str = "",
+    view_owner: str | None = None,
 ) -> DataProductError:
     """Convert a teradatasql OperationalError into a DataProductError.
 
     Args:
-        query_context: Short label for the query that was running when the error
-                       occurred, e.g. ``"MortgagePlatform_Semantic.lineage_graph"``.
-                       Included in the error message so the user knows exactly
-                       which step failed.
+        query_context: Fully-qualified name of the object being queried when the
+                       error occurred, e.g. ``"MortgagePlatform_Semantic.lineage_graph"``.
+        view_owner:    If already resolved, the CreatorName of the failing view.
+                       When provided, the GRANT statement uses the real owner name
+                       instead of the ``<view_owner>`` placeholder.
     """
     msg = str(exc)
 
@@ -170,20 +174,27 @@ def parse_teradata_error(
         return LoginError()
 
     if code == 5315:
-        # View owner lacks SELECT WITH GRANT OPTION on a DBC system table.
-        # Extract the specific object from the error message.
         owner_match = _OWNER_OBJ_RE.search(msg)
         dbc_obj = owner_match.group(1) if owner_match else "DBC.TablesV"
-        view_ref = query_context or "a view in this data product"
+        view_ref = query_context or "unknown view"
+        grantee = view_owner if view_owner else "<view_owner>"
+        grant_line = f"    GRANT SELECT ON {dbc_obj} TO {grantee} WITH GRANT OPTION;"
+        owner_note = (
+            f"  View owner: {view_owner}"
+            if view_owner
+            else (
+                f"  To find the view owner:\n\n"
+                f"    SELECT CreatorName FROM DBC.TablesV\n"
+                f"    WHERE DatabaseName = '{product_name}_Semantic'\n"
+                f"      AND TableName = 'lineage_graph';"
+            )
+        )
         return DataProductError(
-            f"View permission error while querying '{view_ref}'.{context_line}\n\n"
+            f"View permission error on '{view_ref}'.{context_line}\n\n"
             f"  The view owner does not have SELECT WITH GRANT OPTION on '{dbc_obj}'.\n\n"
             f"  Ask your Teradata DBA to run:\n\n"
-            f"    GRANT SELECT ON {dbc_obj} TO <view_owner> WITH GRANT OPTION;\n\n"
-            f"  The view owner is the database that owns '{view_ref}'.\n"
-            f"  To find it:  SELECT CreatorName FROM DBC.TablesV "
-            f"WHERE DatabaseName = '{product_name}_Semantic' "
-            f"AND TableName = 'lineage_graph';"
+            f"{grant_line}\n\n"
+            f"{owner_note}"
         )
 
     if "unable to connect" in msg.lower() or "connection refused" in msg.lower():

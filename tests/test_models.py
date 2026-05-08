@@ -378,8 +378,30 @@ class TestExceptions:
         msg = str(result)
         assert "WITH GRANT OPTION" in msg
         assert "DBC.TablesV" in msg
+        assert "DataBaseName" not in msg   # column name must be stripped
         assert "lineage_graph" in msg
-        assert "GRANT SELECT ON" in msg
+        assert "GRANT SELECT ON DBC.TablesV TO <view_owner>" in msg
+
+    def test_parse_5315_with_owner_uses_real_name(self):
+        from data_product_guide.exceptions import parse_teradata_error
+
+        class FakeOpError(Exception):
+            pass
+        FakeOpError.__module__ = "teradatasql"
+
+        raw = FakeOpError(
+            "[Error 5315] An owner referenced by user does not have "
+            "SELECT WITH GRANT OPTION access to DBC.TablesV.DataBaseName."
+        )
+        result = parse_teradata_error(
+            raw, "MortgagePlatform", "pd185014", "tdhost",
+            query_context="MortgagePlatform_Semantic.lineage_graph",
+            view_owner="MPC_Server_User",
+        )
+        msg = str(result)
+        assert "GRANT SELECT ON DBC.TablesV TO MPC_Server_User WITH GRANT OPTION" in msg
+        assert "<view_owner>" not in msg
+        assert "View owner: MPC_Server_User" in msg
 
     def test_parse_unknown_error_includes_query_context(self):
         from data_product_guide.exceptions import parse_teradata_error

@@ -60,6 +60,19 @@ def _run(cursor: Any, sql: str, model_class: type, product_name: str, user: str,
         raise
 
 
+def _lookup_view_owner(cursor: Any, database: str, view_name: str) -> str | None:
+    """Return the CreatorName for a view, or None if the lookup itself fails."""
+    try:
+        cursor.execute(
+            f"SELECT CreatorName FROM DBC.TablesV "
+            f"WHERE DatabaseName = '{database}' AND TableName = '{view_name}'"
+        )
+        row = cursor.fetchone()
+        return str(row[0]).strip() if row else None
+    except Exception:
+        return None
+
+
 def _run_optional(
     cursor: Any,
     sql: str,
@@ -79,11 +92,20 @@ def _run_optional(
         return _rows(cursor, model_class), None
     except Exception as exc:
         if "teradatasql" in type(exc).__module__ or "OperationalError" in type(exc).__name__:
+            # For 5315 errors, resolve the view owner so the GRANT statement
+            # uses the real name rather than a placeholder.
+            view_owner = None
+            if "[Error 5315]" in str(exc):
+                parts = warn_label.split(".")
+                if len(parts) == 2:
+                    view_owner = _lookup_view_owner(cursor, parts[0], parts[1])
+
             friendly = parse_teradata_error(
                 exc, product_name, user, host,
-                query_context=_table_from_sql(sql),
+                query_context=warn_label,
+                view_owner=view_owner,
             )
-            return [], f"⚠  Skipped {warn_label}: {str(friendly)}"
+            return [], f"⚠  Skipped {warn_label}:\n\n{str(friendly)}"
         raise
 
 
