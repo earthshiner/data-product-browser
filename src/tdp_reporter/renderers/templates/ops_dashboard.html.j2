@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>{{ product_name }} · Operational Dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+:root {
+  --nav:   #00233C;
+  --nav-2: #001826;
+  --nav-3: #0B3552;
+  --panel: #122C40;
+  --orange: #FF5F02;
+  --text:  #E5ECF2;
+  --text-dim: #9AAEBF;
+  --border: rgba(255,255,255,0.08);
+  --border-strong: rgba(255,255,255,0.18);
+  --green:  #7ED321;
+  --amber:  #F5A623;
+  --red:    #FF4D4D;
+  --blue:   #4DA3FF;
+  --purple: #B383F2;
+  --font: 'Inter', system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 0; background: var(--nav-2); color: var(--text); font-family: var(--font); font-size: 13px; line-height: 1.5; min-height: 100vh; }
+
+.app-header { position: sticky; top: 0; z-index: 100; background: var(--nav); border-bottom: 2px solid var(--orange); padding: 14px 28px; display: flex; align-items: center; gap: 24px; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+.app-header .product { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.app-header .subtitle { color: var(--text-dim); font-size: 12px; margin-top: 2px; }
+.header-spacer { flex: 1; }
+.refresh-stamp { color: var(--text-dim); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
+
+main { max-width: 1480px; margin: 0 auto; padding: 24px 28px 60px; }
+
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 22px; overflow: hidden; }
+.panel-head { padding: 14px 20px; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, rgba(255,255,255,.02), transparent); }
+.panel-head .chev { font-size: 14px; color: var(--text-dim); transition: transform .2s ease; }
+.panel.collapsed .chev { transform: rotate(-90deg); }
+.panel-head h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.005em; }
+.panel-head .panel-sum { margin-left: auto; font-size: 12px; color: var(--text-dim); display: flex; gap: 12px; align-items: center; }
+.panel-body { padding: 20px; }
+.panel.collapsed .panel-body { display: none; }
+
+.mgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.mcard { background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.mcard .lbl { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; }
+.mcard .val { font-size: 24px; font-weight: 600; margin-top: 4px; color: var(--text); }
+.mcard .sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.mcard.green .val { color: var(--green); }
+.mcard.amber .val { color: var(--amber); }
+.mcard.red   .val { color: var(--red); }
+
+.module-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.module-card { background: rgba(255,255,255,.03); border: 1px solid var(--border); border-left: 4px solid var(--green); border-radius: 8px; padding: 14px 16px; }
+.module-card.planned  { border-left-color: var(--text-dim); opacity: .65; }
+.module-card.deprecated { border-left-color: var(--red); }
+.module-card .name   { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+.module-card .dbname { font-family: 'Menlo', monospace; font-size: 11px; color: var(--orange); margin-bottom: 8px; }
+.module-card .purpose { font-size: 12px; color: var(--text-dim); line-height: 1.45; margin-bottom: 10px; }
+.module-card .stats  { display: flex; gap: 16px; font-size: 11px; color: var(--text-dim); }
+.module-card .stats strong { color: var(--text); font-weight: 600; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.badge.green  { background: rgba(126,211,33,.15);  color: var(--green); }
+.badge.amber  { background: rgba(245,166,35,.15);  color: var(--amber); }
+.badge.red    { background: rgba(255,77,77,.15);   color: var(--red); }
+.badge.blue   { background: rgba(77,163,255,.15);  color: var(--blue); }
+.badge.grey   { background: rgba(154,174,191,.12); color: var(--text-dim); }
+
+.dtable { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dtable thead th { text-align: left; font-weight: 500; color: var(--text-dim); padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.dtable tbody td { padding: 9px 8px; border-bottom: .5px solid var(--border); vertical-align: middle; }
+.dtable tbody tr:hover { background: rgba(255,255,255,.03); }
+.dtable .mono { font-family: 'Menlo', monospace; font-size: 11px; color: var(--orange); }
+
+#trust-arc { width: 100px; height: 100px; }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div>
+    <div class="product">{{ product_name }}</div>
+    <div class="subtitle">Operational Dashboard</div>
+  </div>
+  <div class="header-spacer"></div>
+  <svg id="trust-arc" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="8"/>
+    <circle id="trust-ring" cx="50" cy="50" r="38" fill="none" stroke="#7ED321" stroke-width="8"
+            stroke-dasharray="239" stroke-dashoffset="239" stroke-linecap="round"
+            transform="rotate(-90 50 50)"/>
+    <text id="trust-label" x="50" y="54" text-anchor="middle" font-size="18" font-weight="600" fill="#E5ECF2">—</text>
+    <text x="50" y="68" text-anchor="middle" font-size="9" fill="#9AAEBF">TRUST</text>
+  </svg>
+  <div>
+    <div class="refresh-stamp">Generated</div>
+    <div style="color:var(--text);font-size:12px;">{{ generated_at }}</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- Summary metrics rendered by JS from DATA -->
+  <div class="mgrid" id="summary-metrics"></div>
+
+  <!-- Modules -->
+  <div class="panel" id="panel-modules">
+    <div class="panel-head" onclick="togglePanel(this)">
+      <span class="chev">▾</span>
+      <h2>Module Health</h2>
+      <div class="panel-sum" id="module-sum"></div>
+    </div>
+    <div class="panel-body">
+      <div class="module-grid" id="module-grid"></div>
+    </div>
+  </div>
+
+  <!-- Quality -->
+  <div class="panel" id="panel-quality">
+    <div class="panel-head" onclick="togglePanel(this)">
+      <span class="chev">▾</span>
+      <h2>Data Quality</h2>
+      <div class="panel-sum" id="quality-sum"></div>
+    </div>
+    <div class="panel-body">
+      <table class="dtable" id="quality-table">
+        <thead><tr><th>Table</th><th>Metric</th><th>Value</th><th>Threshold</th><th>Status</th><th>Measured</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Lineage runs -->
+  <div class="panel" id="panel-lineage">
+    <div class="panel-head" onclick="togglePanel(this)">
+      <span class="chev">▾</span>
+      <h2>Lineage Runs</h2>
+      <div class="panel-sum" id="lineage-sum"></div>
+    </div>
+    <div class="panel-body">
+      <table class="dtable" id="lineage-table">
+        <thead><tr><th>Job</th><th>Status</th><th>Run DTS</th><th>Duration</th><th>Read</th><th>Written</th><th>Rejected</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Agent outcomes -->
+  <div class="panel" id="panel-agents">
+    <div class="panel-head" onclick="togglePanel(this)">
+      <span class="chev">▾</span>
+      <h2>Agent Outcomes</h2>
+      <div class="panel-sum" id="agent-sum"></div>
+    </div>
+    <div class="panel-body">
+      <div class="mgrid" id="agent-metrics"></div>
+    </div>
+  </div>
+
+  <!-- Change events -->
+  <div class="panel" id="panel-changes">
+    <div class="panel-head" onclick="togglePanel(this)">
+      <span class="chev">▾</span>
+      <h2>Recent Changes</h2>
+      <div class="panel-sum" id="changes-sum"></div>
+    </div>
+    <div class="panel-body">
+      <table class="dtable" id="changes-table">
+        <thead><tr><th>Time</th><th>Table</th><th>Operation</th><th>Records</th><th>Job</th><th>Status</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<script>
+window.__DATA__ = {{ data_json }};
+
+const D = window.__DATA__;
+
+// ---- Utilities -------------------------------------------------------------
+function fmt(n) { return n == null ? '—' : Number(n).toLocaleString(); }
+function fmtDts(s) { if (!s) return '—'; const d = new Date(s); return d.toLocaleString('en-AU', {dateStyle:'short',timeStyle:'short'}); }
+function badge(text, cls) { return `<span class="badge ${cls}">${text}</span>`; }
+function statusBadge(s) {
+  const m = {SUCCESS:'green', COMPLETED:'green', DEPLOYED:'green',
+             WARNING:'amber', RUNNING:'blue',
+             FAILED:'red',   ERROR:'red', DEPRECATED:'red'};
+  return badge(s, m[s?.toUpperCase()] || 'grey');
+}
+function togglePanel(head) {
+  head.closest('.panel').classList.toggle('collapsed');
+}
+
+// ---- Trust arc animation ---------------------------------------------------
+const circumference = 2 * Math.PI * 38;
+const ring = document.getElementById('trust-ring');
+const label = document.getElementById('trust-label');
+const score = D.trust_score ?? 0;
+ring.style.stroke = score >= 80 ? '#7ED321' : score >= 60 ? '#F5A623' : '#FF4D4D';
+label.textContent = score + '%';
+setTimeout(() => {
+  ring.style.transition = 'stroke-dashoffset 1s ease';
+  ring.setAttribute('stroke-dashoffset', circumference * (1 - score / 100));
+}, 100);
+
+// ---- Summary metrics -------------------------------------------------------
+const summaryEl = document.getElementById('summary-metrics');
+[
+  {lbl:'Trust Score', val: score + '%', cls: score >= 80 ? 'green' : score >= 60 ? 'amber' : 'red', sub: 'quality pass rate'},
+  {lbl:'Modules',     val: D.modules.length,              cls: '',      sub: 'deployed'},
+  {lbl:'Recipes',     val: fmt(D.recipe_count),            cls: '',      sub: 'in cookbook'},
+  {lbl:'Entities',    val: fmt(D.entity_count),            cls: '',      sub: 'in semantic'},
+  {lbl:'Quality Checks', val: fmt(D.total_quality_checks), cls: '',      sub: D.quality_failures + ' failures'},
+  {lbl:'Lineage Runs',   val: fmt(D.recent_lineage_runs.length), cls:'', sub: 'last 90 days'},
+].forEach(m => {
+  summaryEl.insertAdjacentHTML('beforeend',
+    `<div class="mcard ${m.cls}">
+       <div class="lbl">${m.lbl}</div>
+       <div class="val">${m.val}</div>
+       <div class="sub">${m.sub}</div>
+     </div>`);
+});
+
+// ---- Module grid -----------------------------------------------------------
+const moduleGrid = document.getElementById('module-grid');
+const moduleSumEl = document.getElementById('module-sum');
+D.modules.forEach(m => {
+  const cls = m.status === 'DEPLOYED' ? '' : m.status === 'DEPRECATED' ? 'deprecated' : 'planned';
+  moduleGrid.insertAdjacentHTML('beforeend',
+    `<div class="module-card ${cls}">
+       <div class="name">${m.name}</div>
+       <div class="dbname">${m.database}</div>
+       <div class="purpose">${m.purpose}</div>
+       <div class="stats">
+         <span>${statusBadge(m.status)}</span>
+         <strong style="margin-left:auto;">v${m.version}</strong>
+       </div>
+     </div>`);
+});
+moduleSumEl.textContent = `${D.modules.filter(m => m.status === 'DEPLOYED').length} deployed`;
+
+// ---- Quality table ---------------------------------------------------------
+const qBody = document.querySelector('#quality-table tbody');
+const qSumEl = document.getElementById('quality-sum');
+let qRows = 0;
+Object.entries(D.failures_by_table).forEach(([tbl, fails]) => {
+  fails.forEach(f => {
+    qBody.insertAdjacentHTML('beforeend',
+      `<tr>
+         <td class="mono">${tbl}</td>
+         <td>${f.metric}</td>
+         <td style="text-align:right;">${f.value ?? '—'}</td>
+         <td style="text-align:right;">${f.threshold ?? '—'}</td>
+         <td>${badge('FAIL','red')}</td>
+         <td style="color:var(--text-dim);">${fmtDts(f.measured_at)}</td>
+       </tr>`);
+    qRows++;
+  });
+});
+if (qRows === 0) {
+  qBody.insertAdjacentHTML('beforeend',
+    `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:20px;">${badge('ALL CHECKS PASSING','green')}</td></tr>`);
+}
+qSumEl.innerHTML = D.quality_failures > 0
+  ? `${badge(D.quality_failures + ' failures', 'red')} of ${fmt(D.total_quality_checks)} checks`
+  : `${badge('All passing', 'green')} &nbsp;${fmt(D.total_quality_checks)} checks`;
+
+// ---- Lineage table ---------------------------------------------------------
+const lBody = document.querySelector('#lineage-table tbody');
+const lSumEl = document.getElementById('lineage-sum');
+D.recent_lineage_runs.forEach(r => {
+  lBody.insertAdjacentHTML('beforeend',
+    `<tr>
+       <td>${r.job || '—'}</td>
+       <td>${statusBadge(r.status)}</td>
+       <td style="color:var(--text-dim);">${fmtDts(r.run_dts)}</td>
+       <td style="text-align:right;">${r.duration_ms != null ? (r.duration_ms/1000).toFixed(1)+'s' : '—'}</td>
+       <td style="text-align:right;">${fmt(r.records_read)}</td>
+       <td style="text-align:right;">${fmt(r.records_written)}</td>
+       <td style="text-align:right;color:${r.records_rejected ? 'var(--amber)' : 'inherit'};">${fmt(r.records_rejected)}</td>
+     </tr>`);
+});
+if (!D.recent_lineage_runs.length) {
+  lBody.insertAdjacentHTML('beforeend', `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:20px;">No lineage runs in period</td></tr>`);
+}
+const successRuns = D.recent_lineage_runs.filter(r => r.status?.toUpperCase() === 'SUCCESS').length;
+lSumEl.innerHTML = `${successRuns} / ${D.recent_lineage_runs.length} successful`;
+
+// ---- Agent outcomes --------------------------------------------------------
+const agentMetricsEl = document.getElementById('agent-metrics');
+const agentSumEl = document.getElementById('agent-sum');
+const ag = D.agent_summary;
+agentMetricsEl.insertAdjacentHTML('beforeend',
+  `<div class="mcard"><div class="lbl">Total Outcomes</div><div class="val">${fmt(ag.total)}</div></div>`);
+if (ag.avg_confidence != null) {
+  const conf = Math.round(ag.avg_confidence * 100);
+  agentMetricsEl.insertAdjacentHTML('beforeend',
+    `<div class="mcard ${conf >= 80 ? 'green' : conf >= 60 ? 'amber' : 'red'}">
+       <div class="lbl">Avg Confidence</div><div class="val">${conf}%</div></div>`);
+}
+Object.entries(ag.by_type).forEach(([type, count]) => {
+  agentMetricsEl.insertAdjacentHTML('beforeend',
+    `<div class="mcard"><div class="lbl">${type}</div><div class="val">${fmt(count)}</div></div>`);
+});
+agentSumEl.textContent = `${fmt(ag.total)} outcomes recorded`;
+
+// ---- Change events ---------------------------------------------------------
+const cBody = document.querySelector('#changes-table tbody');
+const cSumEl = document.getElementById('changes-sum');
+D.recent_changes.forEach(e => {
+  cBody.insertAdjacentHTML('beforeend',
+    `<tr>
+       <td style="color:var(--text-dim);">${fmtDts(e.event_dts)}</td>
+       <td class="mono">${e.database}.${e.table}</td>
+       <td>${badge(e.operation, e.operation === 'DELETE' ? 'red' : e.operation === 'INSERT' ? 'green' : 'blue')}</td>
+       <td style="text-align:right;">${fmt(e.records_affected)}</td>
+       <td style="color:var(--text-dim);">${e.job || '—'}</td>
+       <td>${e.successful ? badge('OK','green') : badge('FAIL','red')}</td>
+     </tr>`);
+});
+if (!D.recent_changes.length) {
+  cBody.insertAdjacentHTML('beforeend', `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:20px;">No change events in period</td></tr>`);
+}
+cSumEl.textContent = `${D.recent_changes.length} events`;
+</script>
+</body>
+</html>

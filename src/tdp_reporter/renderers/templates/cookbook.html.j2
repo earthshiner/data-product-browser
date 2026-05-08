@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ product_name }} Cookbook · Teradata</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --navy: #00233C;
+  --orange: #FF5F02;
+  --white: #FFFFFF;
+  --bg: #f4f5f7;
+  --card: #ffffff;
+  --border: #e2e4e8;
+  --text-pri: #1a1a2e;
+  --text-sec: #6b7280;
+  --green: #16a34a;
+  --purple: #7c3aed;
+  --amber-bg: #fff7ed;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text-pri); line-height: 1.5; }
+
+.header { background: var(--navy); color: var(--white); padding: 14px 32px; display: flex; align-items: center; gap: 24px; box-shadow: 0 2px 8px rgba(0,35,60,.15); }
+.header .title-block { flex: 1; }
+.header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+.header .subtitle { font-size: 12px; opacity: .75; margin-top: 2px; }
+.header .version { background: var(--orange); color: var(--white); padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; letter-spacing: .5px; }
+
+.top-tabs { background: var(--white); border-bottom: 1px solid var(--border); display: flex; padding: 0 32px; }
+.top-tab { background: none; border: none; padding: 14px 20px; font-family: inherit; font-size: 14px; font-weight: 600; color: var(--text-sec); cursor: pointer; border-bottom: 3px solid transparent; transition: color .2s, border-color .2s; }
+.top-tab:hover { color: var(--navy); }
+.top-tab.active { color: var(--navy); border-bottom-color: var(--orange); }
+
+.container { max-width: 1280px; margin: 0 auto; padding: 28px 32px; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.section-intro { background: var(--white); border: 1px solid var(--border); border-left: 4px solid var(--orange); padding: 14px 20px; border-radius: 6px; margin-bottom: 24px; font-size: 13px; color: var(--text-sec); }
+.section-intro strong { color: var(--text-pri); }
+
+/* Recipe cards */
+.recipe-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.04); overflow: hidden; }
+.recipe-card[open] { box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+.recipe-header { padding: 14px 20px; display: flex; align-items: center; gap: 14px; cursor: pointer; list-style: none; background: var(--white); border-bottom: 1px solid transparent; user-select: none; }
+.recipe-header::-webkit-details-marker { display: none; }
+.recipe-card[open] .recipe-header { border-bottom-color: var(--border); }
+.recipe-id { background: var(--navy); color: var(--white); padding: 3px 8px; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .4px; }
+.recipe-title { flex: 1; font-size: 14px; font-weight: 600; color: var(--text-pri); }
+.badges { display: flex; gap: 6px; }
+.badge { font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 3px; letter-spacing: .3px; }
+.badge.module { background: #eef2f7; color: var(--navy); }
+.complexity-SIMPLE  { background: #dcfce7; color: var(--green); }
+.complexity-MEDIUM  { background: #fed7aa; color: #c2410c; }
+.complexity-COMPLEX { background: #ede9fe; color: var(--purple); }
+
+.recipe-question { display: flex; gap: 12px; padding: 14px 20px; font-size: 13px; background: var(--navy); color: var(--white); }
+.recipe-context   { display: flex; gap: 12px; padding: 14px 20px; font-size: 13px; background: var(--amber-bg); border-left: 4px solid var(--orange); }
+.recipe-question .icon, .recipe-context .icon { font-size: 16px; line-height: 1; flex-shrink: 0; }
+.recipe-question .label, .recipe-context .label { font-size: 10px; font-weight: 700; letter-spacing: .6px; opacity: .75; margin-bottom: 3px; text-transform: uppercase; }
+.recipe-context .label { color: var(--orange); opacity: 1; }
+.recipe-question .text { color: var(--white); font-weight: 500; }
+.recipe-context .text { color: var(--text-pri); }
+
+.recipe-meta { background: #f9fafb; padding: 12px 20px; font-size: 12px; border-bottom: 1px solid var(--border); }
+.meta-row { padding: 3px 0; color: var(--text-sec); }
+.meta-label { font-weight: 600; color: var(--text-pri); margin-right: 4px; }
+
+.sub-tabs { display: flex; background: var(--white); border-bottom: 1px solid var(--border); padding: 0 12px; }
+.sub-tab { background: none; border: none; padding: 10px 16px; font-family: inherit; font-size: 12px; font-weight: 600; color: var(--text-sec); cursor: pointer; border-bottom: 2px solid transparent; }
+.sub-tab:hover { color: var(--navy); }
+.sub-tab.active { color: var(--navy); border-bottom-color: var(--orange); }
+.sub-panel { display: none; }
+.sub-panel.active { display: block; }
+
+.code-label { background: #0f1c2e; color: var(--text-sec); padding: 6px 16px; font-size: 10px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; }
+.code-block { background: var(--navy); color: #e2e8f0; padding: 16px 20px; margin: 0; font-family: 'JetBrains Mono', 'Menlo', monospace; font-size: 12px; line-height: 1.55; overflow-x: auto; white-space: pre; }
+.sql-keyword  { color: #93c5fd; font-weight: 600; }
+.sql-function { color: #fbbf24; }
+.sql-string   { color: #86efac; }
+.sql-comment  { color: #6b7280; font-style: italic; }
+.sql-number   { color: #c4b5fd; }
+
+.diagram-container { padding: 18px; overflow-x: auto; background: var(--white); }
+.diagram-container svg { display: block; max-width: 100%; height: auto; }
+
+/* Data Dictionary */
+.dd-card { background: var(--card); border: 1px solid var(--border); border-radius: 6px; margin: 0 0 10px; overflow: hidden; }
+.dd-summary { padding: 10px 16px; cursor: pointer; display: flex; align-items: center; gap: 14px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--navy); list-style: none; }
+.dd-summary::-webkit-details-marker { display: none; }
+.dd-summary::before { content: '▸'; color: var(--orange); font-size: 11px; transition: transform .15s; }
+.dd-card[open] .dd-summary::before { transform: rotate(90deg); }
+.dd-summary-name { font-weight: 700; }
+.dd-summary-cat { font-size: 10px; padding: 2px 8px; background: var(--navy); color: var(--white); border-radius: 3px; letter-spacing: .06em; }
+.dd-summary-stats { margin-left: auto; color: var(--text-sec); font-size: 11px; font-family: Inter, sans-serif; }
+.dd-table-wrap { max-height: 60vh; overflow: auto; border-top: 1px solid var(--border); }
+.dd-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dd-table thead th { position: sticky; top: 0; background: var(--navy); color: var(--white); padding: 8px 10px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.dd-table tbody tr { border-bottom: 1px solid var(--border); }
+.dd-table tbody tr:nth-child(even) { background: #f8fafb; }
+.dd-table td { padding: 6px 10px; vertical-align: middle; }
+.dd-name { font-family: 'JetBrains Mono', monospace; color: var(--navy); font-weight: 600; }
+.dd-type { font-family: 'JetBrains Mono', monospace; color: var(--orange); }
+.dd-desc { color: var(--text-pri); font-size: 11px; max-width: 360px; }
+.flag { display: inline-block; font-size: 9px; padding: 2px 6px; border-radius: 3px; font-weight: 700; letter-spacing: .04em; margin-right: 3px; }
+.flag-pii  { background: #dc2626; color: #fff; }
+.flag-sens { background: #d97706; color: #fff; }
+
+/* Glossary */
+.gloss-cat-heading { margin: 24px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--orange); color: var(--navy); font-size: 15px; font-weight: 700; }
+.gloss-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-bottom: 10px; }
+.gloss-card { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.gloss-card h4 { margin: 0; color: var(--navy); font-size: 14px; font-weight: 700; }
+.gloss-definition { margin: 0; font-size: 13px; color: var(--text-pri); line-height: 1.45; }
+.gloss-context-block { background: #fffbeb; border-left: 3px solid var(--orange); padding: 8px 10px; border-radius: 0 3px 3px 0; }
+.gloss-context-label { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--orange); font-weight: 700; margin-bottom: 4px; }
+.gloss-context { margin: 0; font-size: 12px; color: #78350f; line-height: 1.45; }
+.gloss-related { font-size: 11px; color: var(--text-sec); font-family: 'JetBrains Mono', monospace; }
+
+/* Architecture tab */
+.arch-section { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-bottom: 24px; }
+.arch-section h2 { margin: 0 0 4px; color: var(--navy); font-size: 16px; font-weight: 700; }
+.arch-subtitle { margin: 0 0 16px; color: var(--text-sec); font-size: 12px; }
+.arch-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.arch-table thead th { background: #f9fafb; padding: 10px 12px; text-align: left; font-weight: 600; color: var(--text-sec); border-bottom: 2px solid var(--border); text-transform: uppercase; letter-spacing: .4px; font-size: 10px; }
+.arch-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.arch-table tbody tr:hover { background: #f9fafb; }
+.arch-table code { background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-size: 11px; color: var(--navy); }
+.module-pill { background: var(--navy); color: var(--white); padding: 3px 8px; border-radius: 3px; font-size: 10px; font-weight: 700; letter-spacing: .5px; }
+.status-DEPLOYED  { background: #dcfce7; color: #16a34a; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 700; }
+.status-PLANNED   { background: #f3f4f6; color: #6b7280; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 700; }
+.status-DEPRECATED{ background: #fee2e2; color: #dc2626; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="title-block">
+    <h1>{{ product_name }} · Data Product Cookbook</h1>
+    <div class="subtitle">AI-Native Data Product · {{ recipe_count }} recipes · {{ module_count }} modules · Generated {{ generated_at }}</div>
+  </div>
+  <span class="version">{{ version }}</span>
+</header>
+
+<nav class="top-tabs">
+  <button class="top-tab active" data-target="panel-sql">SQL Recipes</button>
+  <button class="top-tab" data-target="panel-dict">Data Dictionary</button>
+  <button class="top-tab" data-target="panel-glossary">Business Glossary</button>
+  <button class="top-tab" data-target="panel-arch">Architecture</button>
+  <button class="top-tab" data-target="panel-decisions">Design Decisions</button>
+  <button class="top-tab" data-target="panel-changelog">Change Log</button>
+</nav>
+
+<main class="container">
+
+  <!-- ===== SQL Recipes ===== -->
+  <section id="panel-sql" class="tab-panel active">
+    <div class="section-intro">
+      <strong>{{ recipe_count }} validated recipes</strong> sourced from
+      <code>{{ product_name }}_Memory.Query_Cookbook</code>.
+      Each recipe carries the business question, domain context, Teradata SQL,
+      and an object-level join diagram.
+    </div>
+
+    {% for item in enriched_recipes %}
+    {% set r = item.recipe %}
+    <details class="recipe-card" {% if loop.first %}open{% endif %}>
+      <summary class="recipe-header">
+        <span class="recipe-id">{{ r.recipe_id }}</span>
+        <span class="recipe-title">{{ r.recipe_title }}</span>
+        <span class="badges">
+          <span class="badge module">{{ r.source_module }}</span>
+          <span class="badge complexity-{{ r.complexity }}">{{ r.complexity }}</span>
+        </span>
+      </summary>
+
+      <div class="recipe-question">
+        <span class="icon">❓</span>
+        <div class="content">
+          <div class="label">Business question</div>
+          <div class="text">{{ r.use_case }}</div>
+        </div>
+      </div>
+
+      {% if r.recipe_description %}
+      <div class="recipe-context">
+        <span class="icon">📊</span>
+        <div class="content">
+          <div class="label">Context</div>
+          <div class="text">{{ r.recipe_description }}</div>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="recipe-meta">
+        {% if r.performance_notes %}
+        <div class="meta-row"><span class="meta-label">Performance:</span> {{ r.performance_notes }}</div>
+        {% endif %}
+        {% if r.parameter_descriptions %}
+        <div class="meta-row"><span class="meta-label">Parameters:</span> {{ r.parameter_descriptions }}</div>
+        {% endif %}
+        <div class="meta-row"><span class="meta-label">Module version:</span> {{ r.module_version or '—' }}</div>
+      </div>
+
+      <div class="sub-tabs">
+        <button class="sub-tab active" data-target="code-{{ r.recipe_id }}">Code</button>
+        <button class="sub-tab" data-target="join-{{ r.recipe_id }}">Join Diagram</button>
+      </div>
+
+      <div id="code-{{ r.recipe_id }}" class="sub-panel active">
+        <div class="code-label">Teradata SQL</div>
+        <pre class="code-block"><code>{{ item.sql_html }}</code></pre>
+      </div>
+
+      <div id="join-{{ r.recipe_id }}" class="sub-panel">
+        <div class="diagram-container">{{ item.join_diagram }}</div>
+      </div>
+    </details>
+    {% else %}
+    <p style="color:var(--text-sec);font-size:13px;">No active recipes found in {{ product_name }}_Memory.Query_Cookbook.</p>
+    {% endfor %}
+  </section>
+
+  <!-- ===== Data Dictionary ===== -->
+  <section id="panel-dict" class="tab-panel">
+    <div class="section-intro">
+      Column-level metadata from <code>{{ product_name }}_Semantic.column_metadata</code>
+      including business descriptions, data types, PII flags, and sample values.
+    </div>
+
+    {% for table_key, cols in cols_by_table.items() %}
+    <details class="dd-card">
+      <summary class="dd-summary">
+        <span class="dd-summary-name">{{ table_key }}</span>
+        <span class="dd-summary-stats">{{ cols | length }} columns
+          {% set pii_count = cols | selectattr('is_pii', '>', 0) | list | length %}
+          {% if pii_count %} · <span style="color:#dc2626;font-weight:700;">{{ pii_count }} PII</span>{% endif %}
+        </span>
+      </summary>
+      <div class="dd-table-wrap">
+        <table class="dd-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Column</th>
+              <th>Type</th>
+              <th>Flags</th>
+              <th>Description</th>
+              <th>Samples</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for col in cols %}
+            <tr>
+              <td style="color:var(--text-sec);font-size:10px;text-align:right;">{{ loop.index }}</td>
+              <td class="dd-name">{{ col.column_name }}</td>
+              <td class="dd-type">{{ col.data_type or '—' }}</td>
+              <td>
+                {% if col.is_pii %}<span class="flag flag-pii">PII</span>{% endif %}
+                {% if col.is_sensitive %}<span class="flag flag-sens">SENSITIVE</span>{% endif %}
+                {% if not col.is_required %}<span class="flag" style="background:#e5e7eb;color:#6b7280;">NULLABLE</span>{% endif %}
+              </td>
+              <td class="dd-desc">{{ col.business_description or '—' }}</td>
+              <td style="color:var(--text-sec);font-style:italic;font-size:11px;">{{ col.sample_values or '' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% else %}
+    <p style="color:var(--text-sec);font-size:13px;">No column metadata found.</p>
+    {% endfor %}
+  </section>
+
+  <!-- ===== Business Glossary ===== -->
+  <section id="panel-glossary" class="tab-panel">
+    <div class="section-intro">
+      Business terms from <code>{{ product_name }}_Memory.Business_Glossary</code>
+      with definitions, domain context, and cross-references.
+    </div>
+
+    {% for category, terms in glossary_by_cat.items() %}
+    <h3 class="gloss-cat-heading">{{ category }} <span style="font-size:12px;color:var(--text-sec);font-weight:400;">({{ terms | length }})</span></h3>
+    <div class="gloss-grid">
+      {% for t in terms %}
+      <div class="gloss-card">
+        <div><h4>{{ t.term }}</h4></div>
+        <p class="gloss-definition">{{ t.definition }}</p>
+        {% if t.business_context %}
+        <div class="gloss-context-block">
+          <span class="gloss-context-label">Business context</span>
+          <p class="gloss-context">{{ t.business_context }}</p>
+        </div>
+        {% endif %}
+        {% if t.related_terms %}
+        <div class="gloss-related">Related: <code>{{ t.related_terms }}</code></div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="color:var(--text-sec);font-size:13px;">No glossary terms found.</p>
+    {% endfor %}
+  </section>
+
+  <!-- ===== Architecture ===== -->
+  <section id="panel-arch" class="tab-panel">
+
+    <div class="arch-section">
+      <h2>Module Registry</h2>
+      <p class="arch-subtitle">Deployed modules from <code>{{ product_name }}_Memory.Module_Registry</code></p>
+      <table class="arch-table">
+        <thead>
+          <tr><th>Module</th><th>Database</th><th>Version</th><th>Status</th><th>Owner</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          {% for m in module_registry %}
+          <tr>
+            <td><span class="module-pill">{{ m.module_name }}</span></td>
+            <td><code>{{ m.database_name }}</code></td>
+            <td>{{ m.module_version }}</td>
+            <td><span class="status-{{ m.deployment_status }}">{{ m.deployment_status }}</span></td>
+            <td style="font-size:11px;color:var(--text-sec);">{{ m.data_owner or '—' }}</td>
+            <td style="font-size:12px;max-width:360px;">{{ m.module_purpose }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" style="color:var(--text-sec);font-size:12px;">No registry entries found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="arch-section">
+      <h2>Entity Catalogue</h2>
+      <p class="arch-subtitle">From <code>{{ product_name }}_Semantic.entity_metadata</code></p>
+      <table class="arch-table">
+        <thead>
+          <tr><th>Module</th><th>Entity</th><th>Table</th><th>Natural Key</th><th>Category</th><th>Approx Rows</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          {% for e in entities %}
+          <tr>
+            <td><span class="module-pill">{{ e.module_name }}</span></td>
+            <td style="font-weight:600;">{{ e.entity_name }}</td>
+            <td><code>{{ e.database_name }}.{{ e.table_name }}</code></td>
+            <td><code>{{ e.natural_key_column or '—' }}</code></td>
+            <td style="font-size:11px;color:var(--text-sec);">{{ e.entity_category or '—' }}</td>
+            <td style="text-align:right;font-size:11px;">{{ "{:,}".format(e.record_count_approx) if e.record_count_approx else '—' }}</td>
+            <td style="font-size:12px;max-width:320px;">{{ e.entity_description or '' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" style="color:var(--text-sec);font-size:12px;">No entities found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="arch-section">
+      <h2>Table Relationships</h2>
+      <p class="arch-subtitle">From <code>{{ product_name }}_Semantic.table_relationship</code></p>
+      <table class="arch-table">
+        <thead>
+          <tr><th>From</th><th>Join</th><th>To</th><th>Type</th><th>Cardinality</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          {% for r in relationships %}
+          <tr>
+            <td><code>{{ r.from_table }}.{{ r.from_column }}</code></td>
+            <td style="font-size:11px;font-weight:600;color:{% if r.join_type == 'INNER' %}#1d4ed8{% else %}#c2410c{% endif %};">{{ r.join_type }}</td>
+            <td><code>{{ r.to_table }}.{{ r.to_column }}</code></td>
+            <td style="font-size:11px;color:var(--text-sec);">{{ r.relationship_type }}</td>
+            <td style="font-size:11px;color:var(--text-sec);">{{ r.cardinality or '—' }}</td>
+            <td style="font-size:12px;max-width:320px;">{{ r.relationship_desc or '' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" style="color:var(--text-sec);font-size:12px;">No relationships found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if naming_standards %}
+    <div class="arch-section">
+      <h2>Naming Standards</h2>
+      <p class="arch-subtitle">From <code>{{ product_name }}_Semantic.naming_standard</code></p>
+      <table class="arch-table">
+        <thead><tr><th>Type</th><th>Pattern</th><th>Meaning</th><th>Example</th></tr></thead>
+        <tbody>
+          {% for s in naming_standards %}
+          <tr>
+            <td style="font-weight:600;font-size:11px;color:var(--navy);">{{ s.standard_type }}</td>
+            <td><code>{{ s.pattern }}</code></td>
+            <td style="font-size:12px;">{{ s.meaning }}</td>
+            <td><code>{{ s.example or '' }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+  </section>
+
+  <!-- ===== Design Decisions ===== -->
+  <section id="panel-decisions" class="tab-panel">
+    <div class="section-intro">
+      Architecture and design decisions from <code>{{ product_name }}_Memory.Design_Decision</code>.
+    </div>
+
+    {% for category, decisions in decisions_by_cat.items() %}
+    <h3 class="gloss-cat-heading">{{ category }} <span style="font-size:12px;color:var(--text-sec);font-weight:400;">({{ decisions | length }})</span></h3>
+    {% for d in decisions %}
+    <details class="recipe-card">
+      <summary class="recipe-header">
+        <span class="recipe-id">{{ d.decision_id }}-v{{ d.decision_version }}</span>
+        <span class="recipe-title">{{ d.decision_title }}</span>
+        <span class="badges">
+          <span class="badge module">{{ d.source_module }}</span>
+          <span class="badge" style="background:#f3f4f6;color:{% if d.decision_status == 'ACCEPTED' %}var(--green){% elif d.decision_status == 'SUPERSEDED' %}#6b7280{% else %}#c2410c{% endif %};">{{ d.decision_status }}</span>
+        </span>
+      </summary>
+      {% if d.context %}
+      <div class="recipe-context">
+        <span class="icon">🔍</span>
+        <div class="content">
+          <div class="label">Context</div>
+          <div class="text">{{ d.context }}</div>
+        </div>
+      </div>
+      {% endif %}
+      <div class="recipe-meta">
+        {% if d.rationale %}<div class="meta-row"><span class="meta-label">Rationale:</span> {{ d.rationale }}</div>{% endif %}
+        {% if d.consequences %}<div class="meta-row"><span class="meta-label">Consequences:</span> {{ d.consequences }}</div>{% endif %}
+        {% if d.alternatives_considered %}<div class="meta-row"><span class="meta-label">Alternatives considered:</span> {{ d.alternatives_considered }}</div>{% endif %}
+        {% if d.decided_by %}<div class="meta-row"><span class="meta-label">Decided by:</span> {{ d.decided_by }} on {{ d.decided_date }}</div>{% endif %}
+        {% if d.affects_table %}<div class="meta-row"><span class="meta-label">Affects table:</span> <code>{{ d.affects_table }}</code></div>{% endif %}
+      </div>
+    </details>
+    {% endfor %}
+    {% else %}
+    <p style="color:var(--text-sec);font-size:13px;">No design decisions found.</p>
+    {% endfor %}
+  </section>
+
+  <!-- ===== Change Log ===== -->
+  <section id="panel-changelog" class="tab-panel">
+    <div class="section-intro">
+      Deployment history from <code>{{ product_name }}_Memory.Change_Log</code>.
+    </div>
+
+    <table class="arch-table">
+      <thead>
+        <tr><th>ID</th><th>Version</th><th>Title</th><th>Type</th><th>Module</th><th>Status</th><th>Deployed</th></tr>
+      </thead>
+      <tbody>
+        {% for c in change_log %}
+        <tr>
+          <td><code>{{ c.change_id }}</code></td>
+          <td style="font-weight:600;">{{ c.version_number }}</td>
+          <td style="font-size:12px;max-width:300px;">{{ c.change_title }}</td>
+          <td style="font-size:11px;color:var(--text-sec);">{{ c.change_type }}</td>
+          <td><span class="module-pill">{{ c.source_module }}</span></td>
+          <td><span class="status-{{ c.deployment_status }}">{{ c.deployment_status }}</span></td>
+          <td style="font-size:11px;color:var(--text-sec);">{{ c.deployed_date or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="color:var(--text-sec);font-size:12px;">No change log entries found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<script>
+// Top-level tab switching
+document.querySelectorAll('.top-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.top-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.target).classList.add('active');
+  });
+});
+
+// Sub-tab switching inside recipe cards
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.sub-tab');
+  if (!btn) return;
+  const card = btn.closest('.recipe-card, details');
+  card.querySelectorAll('.sub-tab').forEach(b => b.classList.remove('active'));
+  card.querySelectorAll('.sub-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(btn.dataset.target).classList.add('active');
+});
+</script>
+</body>
+</html>
