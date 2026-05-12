@@ -232,8 +232,8 @@ def collect(
 
         quality_metrics = q(
             f"""SELECT * FROM {obs}.data_quality_metric
-                WHERE measured_at >= CURRENT_TIMESTAMP - INTERVAL '{lookback_days}' DAY
-                ORDER BY measured_at DESC""",
+                WHERE measured_dts >= CURRENT_TIMESTAMP - INTERVAL '{lookback_days}' DAY
+                ORDER BY measured_dts DESC""",
             QualityMetric,
         )
         lineage_runs = q(
