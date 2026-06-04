@@ -251,7 +251,7 @@ class QualityMetric(_Base):
     metric_value: Optional[float] = None
     threshold_value: Optional[float] = None
     is_below_threshold: int = 0
-    measured_at: datetime
+    measured_dts: datetime
     quality_context: Optional[str] = None
 
 
