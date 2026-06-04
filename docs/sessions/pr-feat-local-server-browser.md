@@ -1,6 +1,13 @@
-# Local server browser (step 1)
+# Local server browser (steps 1–4)
 
 **Stacked on `feat/rebrand-data-product-browser`** — review/merge that PR first.
+
+Scope grew during the session: this branch now covers plumbing, the SPA shell,
+entity cross-linking, and the product health dashboard. See "Roadmap" below.
+
+Verified visually via a DB-free preview harness (`scripts/_preview_harness.py`):
+shell, health cards/tables with status colouring, entity tabs with counts,
+relationship cards with working cross-entity jumps, glossary and decision cards.
 
 ## Why
 
@@ -50,4 +57,4 @@ uv run data-product-browser serve     # → http://127.0.0.1:8080
 
 ## Roadmap
 
-1 plumbing ✓ · 2 shell ✓ · 3 cross-linking · 4 health tab · 5 ERD tab · 6 cookbook tab
+1 plumbing ✓ · 2 shell ✓ · 3 cross-linking ✓ · 4 health tab ✓ · 5 ERD tab · 6 cookbook tab
