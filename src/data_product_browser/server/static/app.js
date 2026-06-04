@@ -9,6 +9,7 @@ const state = {
   product: null,
   data: null, // the DataProduct object
   activeEntity: null, // entity_metadata_key
+  activeTab: "schema",
 };
 
 const el = (id) => document.getElementById(id);
@@ -133,15 +134,111 @@ function selectEntity(key) {
   const entity = state.data.entities.find((e) => e.entity_metadata_key === key);
   if (!entity) return;
   renderEntity(entity);
+  el("detail").scrollTop = 0;
 }
 
 function esc(s) {
   return (s ?? "").toString().replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
 }
 
+// --- cross-link helpers ------------------------------------------------------
+
+const sameTable = (db, table, e) =>
+  e.database_name === db && (e.table_name || "").toLowerCase() === (table || "").toLowerCase();
+
+function findEntityByTable(db, table) {
+  return state.data.entities.find((e) => sameTable(db, table, e)) || null;
+}
+
+// Jump to the entity backing a given database.table, if one exists.
+function jump(db, table) {
+  const target = findEntityByTable(db, table);
+  if (target) selectEntity(target.entity_metadata_key);
+}
+window.__jump = jump; // referenced by inline onclick handlers
+
+// Render a database.table reference as a clickable link when an entity exists.
+function tableLink(db, table) {
+  const fq = `${esc(db)}.${esc(table)}`;
+  if (findEntityByTable(db, table)) {
+    return `<a class="jump" onclick="window.__jump('${esc(db)}','${esc(table)}')"><code>${fq}</code></a>`;
+  }
+  return `<code>${fq}</code>`;
+}
+
+function relationshipsFor(entity) {
+  const out = [];
+  for (const r of state.data.relationships) {
+    if (sameTable(r.from_database, r.from_table, entity)) {
+      out.push({ dir: "→", thisCol: r.from_column, db: r.to_database, table: r.to_table, col: r.to_column, r });
+    } else if (sameTable(r.to_database, r.to_table, entity)) {
+      out.push({ dir: "←", thisCol: r.to_column, db: r.from_database, table: r.from_table, col: r.from_column, r });
+    }
+  }
+  return out;
+}
+
+function glossaryFor(entity) {
+  const t = (entity.table_name || "").toLowerCase();
+  return state.data.glossary.filter((g) => (g.related_table || "").toLowerCase() === t);
+}
+
+function decisionsFor(entity) {
+  const t = (entity.table_name || "").toLowerCase();
+  return state.data.decisions.filter((d) => (d.affects_table || "").toLowerCase() === t);
+}
+
+// --- detail pane -------------------------------------------------------------
+
 function renderEntity(entity) {
-  const cols = columnsFor(entity);
-  const rows = cols
+  const counts = {
+    schema: columnsFor(entity).length,
+    relationships: relationshipsFor(entity).length,
+    glossary: glossaryFor(entity).length,
+    decisions: decisionsFor(entity).length,
+  };
+  const tab = (id, label) =>
+    `<div class="tab ${state.activeTab === id ? "active" : ""}" data-tab="${id}">
+       ${label}<span class="badge">${counts[id]}</span></div>`;
+
+  el("detail").innerHTML = `
+    <h2>${esc(entity.entity_name)}</h2>
+    <p class="sub">${esc(entity.entity_description) || ""}</p>
+    <dl class="meta-grid">
+      <dt>Object</dt><dd><code>${esc(entity.database_name)}.${esc(entity.table_name)}</code></dd>
+      <dt>Module</dt><dd>${esc(entity.module_name)}</dd>
+      <dt>Category</dt><dd>${esc(entity.entity_category) || "—"}</dd>
+      <dt>Natural key</dt><dd><code>${esc(entity.natural_key_column) || "—"}</code></dd>
+      <dt>Approx. rows</dt><dd>${entity.record_count_approx ?? "—"}</dd>
+    </dl>
+    <div class="tabs">
+      ${tab("schema", "Schema")}${tab("relationships", "Relationships")}
+      ${tab("glossary", "Glossary")}${tab("decisions", "Decisions")}
+    </div>
+    <div id="tab-body"></div>`;
+
+  el("detail")
+    .querySelectorAll(".tab")
+    .forEach((t) =>
+      t.addEventListener("click", () => {
+        state.activeTab = t.dataset.tab;
+        renderEntity(entity);
+      }),
+    );
+  renderTabBody(entity);
+}
+
+function renderTabBody(entity) {
+  const body = el("tab-body");
+  const empty = (msg) => `<div class="empty">${msg}</div>`;
+  if (state.activeTab === "schema") body.innerHTML = schemaHTML(entity);
+  else if (state.activeTab === "relationships") body.innerHTML = relationshipsHTML(entity) || empty("No relationships defined.");
+  else if (state.activeTab === "glossary") body.innerHTML = glossaryHTML(entity) || empty("No glossary terms reference this entity.");
+  else if (state.activeTab === "decisions") body.innerHTML = decisionsHTML(entity) || empty("No design decisions affect this entity.");
+}
+
+function schemaHTML(entity) {
+  const rows = columnsFor(entity)
     .map((c) => {
       const tags =
         (c.is_pii ? '<span class="tag pii">PII</span>' : "") +
@@ -154,21 +251,61 @@ function renderEntity(entity) {
       </tr>`;
     })
     .join("");
-
-  el("detail").innerHTML = `
-    <h2>${esc(entity.entity_name)}</h2>
-    <p class="sub">${esc(entity.entity_description) || ""}</p>
-    <dl class="meta-grid">
-      <dt>Object</dt><dd><code>${esc(entity.database_name)}.${esc(entity.table_name)}</code></dd>
-      <dt>Module</dt><dd>${esc(entity.module_name)}</dd>
-      <dt>Category</dt><dd>${esc(entity.entity_category) || "—"}</dd>
-      <dt>Natural key</dt><dd><code>${esc(entity.natural_key_column) || "—"}</code></dd>
-      <dt>Approx. rows</dt><dd>${entity.record_count_approx ?? "—"}</dd>
-    </dl>
-    <table>
+  return `<table>
       <thead><tr><th>Column</th><th>Type</th><th>Description</th><th>Samples</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="4" class="desc">No column metadata.</td></tr>'}</tbody>
     </table>`;
+}
+
+function relationshipsHTML(entity) {
+  const rels = relationshipsFor(entity);
+  if (!rels.length) return "";
+  return rels
+    .map(
+      (x) => `<div class="card">
+        <h4><code>${esc(x.thisCol)}</code> ${x.dir} ${tableLink(x.db, x.table)}.<code>${esc(x.col)}</code></h4>
+        <div>
+          <span class="pill">${esc(x.r.relationship_type)}</span>
+          ${x.r.cardinality ? `<span class="pill">${esc(x.r.cardinality)}</span>` : ""}
+          <span class="pill">${esc(x.r.join_type)} JOIN</span>
+          ${x.r.is_mandatory ? '<span class="pill">mandatory</span>' : ""}
+        </div>
+        ${x.r.relationship_desc ? `<p class="desc">${esc(x.r.relationship_desc)}</p>` : ""}
+      </div>`,
+    )
+    .join("");
+}
+
+function glossaryHTML(entity) {
+  const terms = glossaryFor(entity);
+  if (!terms.length) return "";
+  return terms
+    .map(
+      (g) => `<div class="card">
+        <h4>${esc(g.term)} <span class="pill">${esc(g.term_category)}</span></h4>
+        <p class="desc">${esc(g.definition)}</p>
+        ${g.business_context ? `<p class="desc"><em>${esc(g.business_context)}</em></p>` : ""}
+        ${g.related_column ? `<div><span class="pill">column</span><code>${esc(g.related_column)}</code></div>` : ""}
+      </div>`,
+    )
+    .join("");
+}
+
+function decisionsHTML(entity) {
+  const decisions = decisionsFor(entity);
+  if (!decisions.length) return "";
+  return decisions
+    .map(
+      (d) => `<div class="card">
+        <h4>${esc(d.decision_title)}
+          <span class="pill">${esc(d.decision_status)}</span>
+          <span class="pill">${esc(d.decision_category)}</span></h4>
+        ${d.decision_description ? `<p class="desc">${esc(d.decision_description)}</p>` : ""}
+        ${d.rationale ? `<p class="desc"><strong>Rationale:</strong> ${esc(d.rationale)}</p>` : ""}
+        ${d.consequences ? `<p class="desc"><strong>Consequences:</strong> ${esc(d.consequences)}</p>` : ""}
+      </div>`,
+    )
+    .join("");
 }
 
 el("product-select").addEventListener("change", (e) => loadProduct(e.target.value));
