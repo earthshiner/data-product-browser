@@ -268,6 +268,9 @@ def serve(
     host: str = typer.Option("127.0.0.1", "--host", help="Address to bind the web server to"),
     port: int = typer.Option(8080, "--port", "-p", help="Port to listen on"),
     ttl: int = typer.Option(300, "--ttl", help="Metadata cache lifetime in seconds"),
+    registry_db: str = typer.Option(
+        None, "--registry-db", help="Governance registry database (overrides TDP_REGISTRY_DB)"
+    ),
 ):
     """Run the interactive Data Product Browser web server.
 
@@ -301,7 +304,7 @@ def serve(
     except Exception as exc:
         _abort(f"Could not connect to Teradata at '{td_host}':\n\n  {str(exc).splitlines()[0]}")
 
-    service = DataProductService(connection_factory, ttl_seconds=ttl)
+    service = DataProductService(connection_factory, registry_db=registry_db, ttl_seconds=ttl)
     typer.echo(f"\nData Product Browser → http://{host}:{port}  (Ctrl+C to stop)\n")
     uvicorn.run(create_app(service), host=host, port=port, log_level="warning")
 

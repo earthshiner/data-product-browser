@@ -1,7 +1,13 @@
-"""Pydantic v2 models derived directly from the AI-Native Data Product DDL.
+"""Pydantic v2 models for the deployed AI-Native Data Product standard.
 
-Each model maps 1-to-1 to a Teradata table. The top-level DataProduct
-aggregates all modules into a single serialisable snapshot used by renderers.
+Each model maps to a Teradata table/view as actually deployed (verified against
+a live product). Discovery is registry-driven: the top-level governance registry
+names each module's view database, and the Semantic ``data_product_map`` confirms
+them. The top-level DataProduct aggregates all modules into one serialisable
+snapshot consumed by the server and renderers.
+
+Fields are deliberately permissive (most Optional) so that minor version drift in
+a deployment degrades to missing values rather than a hard validation error.
 """
 
 from __future__ import annotations
@@ -11,11 +17,47 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
-_TD_DATE_9999 = date(9999, 12, 31)
-
 
 class _Base(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    # Ignore unmodelled columns so deployments with extra columns still parse.
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+
+# ---------------------------------------------------------------------------
+# Governance registry (top-level discovery)
+# ---------------------------------------------------------------------------
+
+
+class RegistryEntry(_Base):
+    """<registry_db>.active_data_product_registry — one row per data product."""
+
+    product_id: Optional[int] = None
+    product_name: str
+    product_version: Optional[str] = None
+    product_description: Optional[str] = None
+    product_status: Optional[str] = None
+    owner_team: Optional[str] = None
+
+    # Base-table databases
+    domain_database: Optional[str] = None
+    semantic_database: Optional[str] = None
+    memory_database: Optional[str] = None
+    observability_database: Optional[str] = None
+    search_database: Optional[str] = None
+    prediction_database: Optional[str] = None
+
+    # View databases (preferred read layer)
+    domain_view_database: Optional[str] = None
+    semantic_view_database: Optional[str] = None
+    memory_view_database: Optional[str] = None
+    observability_view_database: Optional[str] = None
+    search_view_database: Optional[str] = None
+    prediction_view_database: Optional[str] = None
+
+    approved_entrypoint: Optional[str] = None
+    approved_access_mode: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 # ---------------------------------------------------------------------------
@@ -24,87 +66,108 @@ class _Base(BaseModel):
 
 
 class ProductMap(_Base):
-    """MortgagePlatform_Semantic.data_product_map"""
+    """<semantic>.data_product_map"""
 
-    map_key: int
+    module_id: int
     module_name: str
     database_name: str
+    module_description: Optional[str] = None
     module_purpose: Optional[str] = None
+    naming_pattern: Optional[str] = None
+    table_prefix: Optional[str] = None
     primary_tables: Optional[str] = None
-    agent_entry_view: Optional[str] = None
+    primary_views: Optional[str] = None
+    module_version: Optional[str] = None
+    deployment_status: Optional[str] = None
+    deployed_dts: Optional[datetime] = None
     is_active: int = 1
 
 
 class EntityMetadata(_Base):
-    """MortgagePlatform_Semantic.entity_metadata"""
+    """<semantic>.entity_metadata"""
 
-    entity_metadata_key: int
+    entity_metadata_id: int
     module_name: str
     entity_name: str
     database_name: str
     table_name: str
     view_name: Optional[str] = None
+    entity_description: Optional[str] = None
     natural_key_column: Optional[str] = None
     surrogate_key_column: Optional[str] = None
-    entity_description: Optional[str] = None
-    entity_category: Optional[str] = None
-    record_count_approx: Optional[int] = None
+    temporal_pattern: Optional[str] = None
+    current_flag_column: Optional[str] = None
+    deleted_flag_column: Optional[str] = None
+    industry_standard: Optional[str] = None
     is_active: int = 1
 
 
 class ColumnMetadata(_Base):
-    """MortgagePlatform_Semantic.column_metadata"""
+    """<semantic>.column_metadata"""
 
-    column_metadata_key: int
+    column_metadata_id: int
     database_name: str
     table_name: str
     column_name: str
     business_description: Optional[str] = None
     data_type: Optional[str] = None
+    data_classification: Optional[str] = None
+    allowed_values_json: Optional[str] = None
     is_pii: int = 0
     is_sensitive: int = 0
     is_required: int = 1
     is_active: int = 1
-    sample_values: Optional[str] = None
-    validation_rule: Optional[str] = None
 
 
 class TableRelationship(_Base):
-    """MortgagePlatform_Semantic.table_relationship"""
+    """<semantic>.table_relationship"""
 
-    relationship_key: int
-    from_database: str
-    from_table: str
-    from_column: str
-    to_database: str
-    to_table: str
-    to_column: str
-    relationship_type: str
-    join_type: str = "LEFT"
+    relationship_id: int
+    relationship_name: Optional[str] = None
+    relationship_description: Optional[str] = None
+    source_database: str
+    source_table: str
+    source_column: str
+    target_database: str
+    target_table: str
+    target_column: str
+    relationship_type: Optional[str] = None
     cardinality: Optional[str] = None
+    relationship_meaning: Optional[str] = None
     is_mandatory: int = 0
     is_active: int = 1
-    relationship_desc: Optional[str] = None
 
 
-class NamingStandard(_Base):
-    """MortgagePlatform_Semantic.naming_standard"""
+class TrustReport(_Base):
+    """<semantic>.trust_engine_latest — latest trust-engine run for the product."""
 
-    naming_standard_key: int
-    standard_type: str
-    pattern: str
-    meaning: str
-    example: Optional[str] = None
-    is_active: int = 1
+    product_prefix: Optional[str] = None
+    run_id: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    trust_status: Optional[str] = None
+    agent_use_allowed: Optional[int] = None
+    total_checks: Optional[int] = None
+    passed_count: Optional[int] = None
+    failed_count: Optional[int] = None
+    error_count: Optional[int] = None
+    critical_failure_count: Optional[int] = None
+    error_failure_count: Optional[int] = None
+    data_product_trust_score: Optional[float] = None
+    performance_readiness_score: Optional[float] = None
+    operational_readiness_score: Optional[float] = None
+    repair_candidate_count: Optional[int] = None
+    failed_checks_json: Optional[str] = None
+    repair_candidates_json: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
-# Memory module
+# Memory module (matches deployed standard unchanged)
 # ---------------------------------------------------------------------------
 
 
 class Recipe(_Base):
-    """MortgagePlatform_Memory.Query_Cookbook"""
+    """<memory>.Query_Cookbook"""
 
     recipe_key: int
     recipe_id: str
@@ -126,7 +189,7 @@ class Recipe(_Base):
 
 
 class GlossaryTerm(_Base):
-    """MortgagePlatform_Memory.Business_Glossary"""
+    """<memory>.Business_Glossary"""
 
     glossary_key: int
     term: str
@@ -145,7 +208,7 @@ class GlossaryTerm(_Base):
 
 
 class DesignDecision(_Base):
-    """MortgagePlatform_Memory.Design_Decision"""
+    """<memory>.Design_Decision"""
 
     decision_key: int
     decision_id: str
@@ -172,12 +235,11 @@ class DesignDecision(_Base):
 
 
 class ModuleRegistryEntry(_Base):
-    """MortgagePlatform_Memory.Module_Registry"""
+    """<memory>.Module_Registry"""
 
     module_registry_key: int
     module_name: str
     database_name: str
-    deployment_status: str = "DEPLOYED"
     module_version: str
     module_purpose: str
     module_scope: Optional[str] = None
@@ -186,6 +248,7 @@ class ModuleRegistryEntry(_Base):
     dependents: Optional[str] = None
     data_owner: Optional[str] = None
     technical_owner: Optional[str] = None
+    refresh_frequency: Optional[str] = None
     version_date: date
     is_current: int = 1
     valid_from: date
@@ -195,7 +258,7 @@ class ModuleRegistryEntry(_Base):
 
 
 class ImplementationNote(_Base):
-    """MortgagePlatform_Memory.Implementation_Note"""
+    """<memory>.Implementation_Note"""
 
     note_key: int
     note_id: str
@@ -216,7 +279,7 @@ class ImplementationNote(_Base):
 
 
 class ChangeLogEntry(_Base):
-    """MortgagePlatform_Memory.Change_Log"""
+    """<memory>.Change_Log"""
 
     change_key: int
     change_id: str
@@ -242,72 +305,46 @@ class ChangeLogEntry(_Base):
 
 
 class QualityMetric(_Base):
-    """MortgagePlatform_Observability.data_quality_metric"""
+    """<observability>.data_quality_metric
 
-    quality_metric_key: int
+    Note: ``is_threshold_met`` is 1 when the metric PASSES (the opposite polarity
+    to the previous ``is_below_threshold``).
+    """
+
+    quality_metric_id: int
     database_name: str
     table_name: str
+    column_name: Optional[str] = None
     metric_name: str
     metric_value: Optional[float] = None
-    threshold_value: Optional[float] = None
-    is_below_threshold: int = 0
+    metric_category: Optional[str] = None
+    quality_threshold: Optional[float] = None
+    is_threshold_met: Optional[int] = None
+    sample_size: Optional[int] = None
     measured_dts: datetime
-    quality_context: Optional[str] = None
-
-
-class LineageRun(_Base):
-    """MortgagePlatform_Observability.lineage_run"""
-
-    lineage_run_id: int
-    lineage_id: int
-    run_dts: datetime
-    run_status: str
-    run_duration_ms: Optional[int] = None
-    records_read: Optional[int] = None
-    records_written: Optional[int] = None
-    records_rejected: Optional[int] = None
-    batch_key: Optional[str] = None
-    job_name: Optional[str] = None
-    openlineage_run_id: Optional[str] = None
-    error_message: Optional[str] = None
-    created_dts: Optional[datetime] = None
-
-
-class AgentOutcome(_Base):
-    """MortgagePlatform_Observability.agent_outcome"""
-
-    outcome_key: int
-    agent_type: str
-    session_key: Optional[int] = None
-    outcome_type: str
-    outcome_dts: datetime
-    confidence_score: Optional[float] = None
-    user_feedback: Optional[str] = None
-    source_system: Optional[str] = None
-    columns_mapped: Optional[int] = None
-    columns_unmapped: Optional[int] = None
-    sql_generated: Optional[str] = None
-    rows_returned: Optional[int] = None
+    created_at: Optional[datetime] = None
 
 
 class ChangeEvent(_Base):
-    """MortgagePlatform_Observability.change_event"""
+    """<observability>.change_event"""
 
-    change_event_key: int
-    event_dts: datetime
+    change_event_id: int
     database_name: str
     table_name: str
-    operation_type: str
-    records_affected: Optional[int] = None
+    change_type: str
+    change_dts: datetime
     changed_by: Optional[str] = None
-    job_name: Optional[str] = None
-    session_id: Optional[str] = None
+    change_reason: Optional[str] = None
+    change_source: Optional[str] = None
+    records_affected: Optional[int] = None
+    columns_changed: Optional[str] = None
     batch_key: Optional[str] = None
-    is_successful: int = 1
+    job_name: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class DataLineage(_Base):
-    """MortgagePlatform_Observability.data_lineage — registered ETL lineage edges."""
+    """<observability>.data_lineage — registered ETL edges with run telemetry."""
 
     lineage_id: int
     source_database: Optional[str] = None
@@ -315,39 +352,33 @@ class DataLineage(_Base):
     source_system: Optional[str] = None
     target_database: Optional[str] = None
     target_table: str
-    job_name: Optional[str] = None
     transformation_type: Optional[str] = None
     transformation_logic: Optional[str] = None
+    job_name: Optional[str] = None
+    run_dts: Optional[datetime] = None
+    run_status: Optional[str] = None
+    records_read: Optional[int] = None
+    records_written: Optional[int] = None
+    openlineage_run_id: Optional[str] = None
     openlineage_job_name: Optional[str] = None
     openlineage_namespace: Optional[str] = None
-    is_active: int = 1
-    registered_dts: Optional[datetime] = None
-    retired_dts: Optional[datetime] = None
-    created_dts: Optional[datetime] = None
+    created_at: Optional[datetime] = None
 
 
-class LineageGraphEdge(_Base):
-    """MortgagePlatform_Semantic.lineage_graph — flattened graph edges (view output).
+class AgentOutcome(_Base):
+    """<observability>.agent_outcome"""
 
-    Each row is one directed edge: source object → job → target object.
-    The view produces two rows per data_lineage entry (ETL_INPUT + ETL_OUTPUT),
-    giving a complete source-job-target triple when read together by lineage_id.
-    """
-
-    src_object_name_fq: str
-    src_container_name: str
-    src_object_name: str
-    src_kind: str
-    src_display_name: str
-    edge_relationship: str  # 'ETL_INPUT' | 'ETL_OUTPUT'
-    transformation_type: Optional[str] = None
-    transformation_logic: Optional[str] = None
-    lineage_id: int
-    tgt_object_name_fq: str
-    tgt_container_name: str
-    tgt_object_name: str
-    tgt_kind: str
-    tgt_display_name: str
+    outcome_id: int
+    agent_key: Optional[int] = None
+    session_key: Optional[int] = None
+    action_type: Optional[str] = None
+    action_dts: datetime
+    tables_accessed: Optional[str] = None
+    outcome_status: Optional[str] = None
+    user_feedback: Optional[str] = None
+    execution_time_ms: Optional[int] = None
+    records_processed: Optional[int] = None
+    created_at: Optional[datetime] = None
 
 
 # ---------------------------------------------------------------------------
@@ -360,13 +391,14 @@ class DataProduct(_Base):
 
     product_name: str
     generated_dts: datetime
+    registry: Optional[RegistryEntry] = None
+    trust: Optional[TrustReport] = None
 
     # Semantic
     modules: list[ProductMap] = []
     entities: list[EntityMetadata] = []
     columns: list[ColumnMetadata] = []
     relationships: list[TableRelationship] = []
-    naming_standards: list[NamingStandard] = []
 
     # Memory
     recipes: list[Recipe] = []
@@ -378,10 +410,6 @@ class DataProduct(_Base):
 
     # Observability
     quality_metrics: list[QualityMetric] = []
-    lineage_runs: list[LineageRun] = []
-    agent_outcomes: list[AgentOutcome] = []
     change_events: list[ChangeEvent] = []
     data_lineage: list[DataLineage] = []
-
-    # Semantic (view over Observability)
-    lineage_graph: list[LineageGraphEdge] = []
+    agent_outcomes: list[AgentOutcome] = []
