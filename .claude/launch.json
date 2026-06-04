@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "browser-preview",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "python", "scripts/_preview_harness.py"],
+      "port": 8137
+    }
+  ]
+}

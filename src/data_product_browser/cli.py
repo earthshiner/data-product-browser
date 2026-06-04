@@ -263,5 +263,48 @@ def render(
     typer.echo("")
 
 
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host", help="Address to bind the web server to"),
+    port: int = typer.Option(8080, "--port", "-p", help="Port to listen on"),
+    ttl: int = typer.Option(300, "--ttl", help="Metadata cache lifetime in seconds"),
+):
+    """Run the interactive Data Product Browser web server.
+
+    Resolves Teradata credentials once at startup, then serves a browsable UI
+    that reads metadata live (cached) on each request. No AI client required.
+    """
+    import teradatasql
+    import uvicorn
+
+    from .server.app import create_app
+    from .server.service import DataProductService
+
+    load_dotenv()
+    td_host = os.environ.get("TD_HOST")
+    td_user = os.environ.get("TD_USER")
+    if not td_host:
+        _abort(
+            "TD_HOST is not set.\n\n  Add it to your .env file:\n\n    TD_HOST=your-teradata-host"
+        )
+    if not td_user:
+        _abort("TD_USER is not set.\n\n  Add it to your .env file:\n\n    TD_USER=your-username")
+
+    password = _get_password(td_host, td_user)
+
+    def connection_factory():
+        return teradatasql.connect(host=td_host, user=td_user, password=password)
+
+    # Fail fast: verify credentials before starting the server.
+    try:
+        connection_factory().close()
+    except Exception as exc:
+        _abort(f"Could not connect to Teradata at '{td_host}':\n\n  {str(exc).splitlines()[0]}")
+
+    service = DataProductService(connection_factory, ttl_seconds=ttl)
+    typer.echo(f"\nData Product Browser → http://{host}:{port}  (Ctrl+C to stop)\n")
+    uvicorn.run(create_app(service), host=host, port=port, log_level="warning")
+
+
 def main() -> None:
     app()
