@@ -7,7 +7,8 @@ dist/
 .pytest_cache/
 .ruff_cache/
 *.html
-!src/tdp_reporter/renderers/templates/*.html.j2
+!src/data_product_browser/renderers/templates/*.html.j2
+!src/data_product_browser/server/static/*.html
 
 # local export artefacts
 repo-export.zip
