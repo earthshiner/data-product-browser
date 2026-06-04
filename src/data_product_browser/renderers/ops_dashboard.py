@@ -44,7 +44,7 @@ def _build_data(dp: DataProduct) -> dict:
                     "threshold": float(m.threshold_value)
                     if m.threshold_value is not None
                     else None,
-                    "measured_at": m.measured_at.isoformat(),
+                    "measured_dts": m.measured_dts.isoformat(),
                 }
             )
 
@@ -114,24 +114,30 @@ def _build_data(dp: DataProduct) -> dict:
     # --- Data Freshness (Panel 2) from lineage_runs --------------------------
     freshness_rows = []
     for r in dp.lineage_runs:
-        age_h = (dp.generated_at - r.run_dts.replace(tzinfo=dp.generated_at.tzinfo
-                 if r.run_dts.tzinfo is None else r.run_dts.tzinfo)).total_seconds() / 3600
+        age_h = (
+            dp.generated_dts
+            - r.run_dts.replace(
+                tzinfo=dp.generated_dts.tzinfo if r.run_dts.tzinfo is None else r.run_dts.tzinfo
+            )
+        ).total_seconds() / 3600
         if age_h <= 24:
             status = "FRESH"
         elif age_h <= 48:
             status = "STALE"
         else:
             status = "CRITICAL"
-        freshness_rows.append({
-            "job": r.job_name or f"lineage_{r.lineage_id}",
-            "run_dts": r.run_dts.isoformat(),
-            "run_status": r.run_status,
-            "freshness_status": status,
-            "freshness_hours": round(age_h, 1),
-            "duration_ms": r.run_duration_ms,
-            "records_written": r.records_written,
-            "error": r.error_message,
-        })
+        freshness_rows.append(
+            {
+                "job": r.job_name or f"lineage_{r.lineage_id}",
+                "run_dts": r.run_dts.isoformat(),
+                "run_status": r.run_status,
+                "freshness_status": status,
+                "freshness_hours": round(age_h, 1),
+                "duration_ms": r.run_duration_ms,
+                "records_written": r.records_written,
+                "error": r.error_message,
+            }
+        )
 
     fresh_count = sum(1 for r in freshness_rows if r["freshness_status"] == "FRESH")
     stale_count = sum(1 for r in freshness_rows if r["freshness_status"] == "STALE")
@@ -191,7 +197,7 @@ def _build_data(dp: DataProduct) -> dict:
 
     return {
         "product_name": dp.product_name,
-        "generated_at": dp.generated_at.isoformat(),
+        "generated_dts": dp.generated_dts.isoformat(),
         "trust_score": trust_pct,
         "lineage_health_pct": lineage_health_pct,
         "total_quality_checks": len(dp.quality_metrics),
@@ -230,6 +236,6 @@ def render_ops_dashboard(dp: DataProduct) -> str:
     data_json = json.dumps(_build_data(dp), default=str, indent=2)
     return template.render(
         product_name=dp.product_name,
-        generated_at=dp.generated_at.strftime("%Y-%m-%d %H:%M UTC"),
+        generated_dts=dp.generated_dts.strftime("%Y-%m-%d %H:%M UTC"),
         data_json=data_json,
     )

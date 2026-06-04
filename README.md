@@ -1,4 +1,4 @@
-# ai-native-data-product-guide
+# data-product-browser
 
 Generate AI-Native Data Product artefacts (Cookbook, Ops Dashboard) deterministically from Teradata metadata.
 
@@ -29,3 +29,4 @@ tdp-reporter generate MortgagePlatform --output ./output
 ```bash
 uv run pytest
 ```
+

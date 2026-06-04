@@ -76,9 +76,7 @@ def make_python_code(recipe: Recipe) -> str:
         lines.append("}\n")
         param_block = "\n" + "".join(lines)
 
-    run_call = (
-        "df = run_query(sql, params)" if params else "df = run_query(sql)"
-    )
+    run_call = "df = run_query(sql, params)" if params else "df = run_query(sql)"
 
     body = (
         f"\n{_CONN_CELL}\n\n"

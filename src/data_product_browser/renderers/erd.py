@@ -14,11 +14,11 @@ from ..models import ColumnMetadata, EntityMetadata, TableRelationship
 
 # Layout constants
 _BOX_W = 300
-_HDR_H = 28        # table header row height
-_COL_H = 24        # per-column row height
-_GAP_X = 60        # horizontal gap between tables
-_TOP_Y = 40        # y offset for first table
-_LEGEND_GAP = 28   # gap below last table before legend
+_HDR_H = 28  # table header row height
+_COL_H = 24  # per-column row height
+_GAP_X = 60  # horizontal gap between tables
+_TOP_Y = 40  # y offset for first table
+_LEGEND_GAP = 28  # gap below last table before legend
 _FONT = "Inter, -apple-system, sans-serif"
 _MONO = "'JetBrains Mono', Menlo, monospace"
 _COLORS = ["#00233C", "#FF5F02", "#4A90E2", "#16a34a", "#7c3aed"]
@@ -133,13 +133,11 @@ def _render_table(t: _Table, x: int, y: int, parts: list[str]) -> None:
         bg = "#f7f8fa" if idx % 2 == 0 else "#FFFFFF"
         cy = ry + _COL_H // 2 + 4  # text baseline
 
-        parts.append(
-            f'<rect x="{x}" y="{ry}" width="{_BOX_W}" height="{_COL_H}" fill="{bg}"/>'
-        )
+        parts.append(f'<rect x="{x}" y="{ry}" width="{_BOX_W}" height="{_COL_H}" fill="{bg}"/>')
 
         # PK/FK badge (text rect, no emoji — reliable across all browsers/SVG renderers)
         badge_x = x + 6
-        name_x  = x + 10
+        name_x = x + 10
         if col.is_key:
             parts.append(
                 f'<rect x="{badge_x}" y="{ry + 5}" width="16" height="13" rx="2" fill="#0d9488"/>'
@@ -256,7 +254,9 @@ def _render_legend(y: int, parts: list[str]) -> None:
         f'font-weight="700" fill="#FFFFFF" text-anchor="middle">PK</text>'
     )
     lx += 22
-    parts.append(f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">Natural key</text>')
+    parts.append(
+        f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">Natural key</text>'
+    )
     lx += 76
     # FK badge
     parts.append(
@@ -265,7 +265,9 @@ def _render_legend(y: int, parts: list[str]) -> None:
         f'font-weight="700" fill="#FFFFFF" text-anchor="middle">FK</text>'
     )
     lx += 22
-    parts.append(f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">Join column  ·  </text>')
+    parts.append(
+        f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">Join column  ·  </text>'
+    )
     lx += 82
     parts.append(
         f'<rect x="{lx}" y="{y - 10}" width="18" height="13" rx="3" fill="#6b7280"/>'
@@ -273,7 +275,9 @@ def _render_legend(y: int, parts: list[str]) -> None:
         f'font-weight="700" fill="#FFFFFF" text-anchor="middle">NN</text>'
     )
     lx += 24
-    parts.append(f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">=NOT NULL  ·  </text>')
+    parts.append(
+        f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">=NOT NULL  ·  </text>'
+    )
     lx += 78
     parts.append(
         f'<rect x="{lx}" y="{y - 10}" width="22" height="13" rx="3" fill="#dc2626"/>'
@@ -281,7 +285,9 @@ def _render_legend(y: int, parts: list[str]) -> None:
         f'font-weight="700" fill="#FFFFFF" text-anchor="middle">PII</text>'
     )
     lx += 28
-    parts.append(f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">  ·  </text>')
+    parts.append(
+        f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">  ·  </text>'
+    )
     lx += 22
     parts.append(
         f'<rect x="{lx}" y="{y - 10}" width="30" height="13" rx="3" fill="#d97706"/>'
@@ -289,7 +295,9 @@ def _render_legend(y: int, parts: list[str]) -> None:
         f'font-weight="700" fill="#FFFFFF" text-anchor="middle">SENS</text>'
     )
     lx += 36
-    parts.append(f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">=Sensitive</text>')
+    parts.append(
+        f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">=Sensitive</text>'
+    )
 
 
 def make_column_erd(

@@ -16,24 +16,24 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..models import EntityMetadata, TableRelationship
 
-_FONT           = "Inter, sans-serif"
-_FONT_SIZE      = 11          # px, node label
-_CHAR_W_RATIO   = 0.58        # Inter character width approximation
-_NODE_H         = 38
-_NODE_RADIUS    = 6
-_NODE_PAD       = 28          # horizontal padding inside node
-_LAYER_GAP      = 80          # horizontal gap between nodes in the same row
-_MARGIN         = 30          # left/right margin
-_ROW_Y          = 44          # top of node boxes
-_LEGEND_GAP     = 28
+_FONT = "Inter, sans-serif"
+_FONT_SIZE = 11  # px, node label
+_CHAR_W_RATIO = 0.58  # Inter character width approximation
+_NODE_H = 38
+_NODE_RADIUS = 6
+_NODE_PAD = 28  # horizontal padding inside node
+_LAYER_GAP = 80  # horizontal gap between nodes in the same row
+_MARGIN = 30  # left/right margin
+_ROW_Y = 44  # top of node boxes
+_LEGEND_GAP = 28
 
 # Node colours by entity type (matches spec)
-_COL_ENTITY      = "#00233C"   # core entity (navy)
-_COL_ASSOC       = "#FF5F02"   # associative / M:M (orange)
-_COL_REFERENCE   = "#0369a1"   # reference / lookup (blue)
-_COL_UNKNOWN     = "#4A90E2"   # fallback
+_COL_ENTITY = "#00233C"  # core entity (navy)
+_COL_ASSOC = "#FF5F02"  # associative / M:M (orange)
+_COL_REFERENCE = "#0369a1"  # reference / lookup (blue)
+_COL_UNKNOWN = "#4A90E2"  # fallback
 
-_EDGE_SOLID  = "#73726c"
+_EDGE_SOLID = "#73726c"
 _EDGE_DASHED = "#0369a1"
 
 _ARROW_ID = "jd-arrow"
@@ -57,8 +57,7 @@ def _node_colour(
                     return _COL_ASSOC
     if relationships:
         for r in relationships:
-            if (r.to_table.upper() == short.upper()
-                    and r.relationship_type.upper() == "LOOKUP"):
+            if r.to_table.upper() == short.upper() and r.relationship_type.upper() == "LOOKUP":
                 return _COL_REFERENCE
     return _COL_UNKNOWN
 
@@ -126,15 +125,15 @@ def make_join_diagram(
         x1 = xs[i] + widths[i]
         x2 = xs[i + 1]
         t_from = tables[i]
-        t_to   = tables[i + 1]
+        t_to = tables[i + 1]
 
         rel = rel_index.get((t_from.upper(), t_to.upper()))
         dashed = (dashed_after is not None and i >= dashed_after) or (
             rel is not None and rel.join_type.upper() != "INNER"
         )
-        stroke     = _EDGE_DASHED if dashed else _EDGE_SOLID
-        dash_attr  = ' stroke-dasharray="5,3"' if dashed else ""
-        path       = _bezier_h(x1, cy, x2, cy)
+        stroke = _EDGE_DASHED if dashed else _EDGE_SOLID
+        dash_attr = ' stroke-dasharray="5,3"' if dashed else ""
+        path = _bezier_h(x1, cy, x2, cy)
 
         parts.append(
             f'<path d="{path}" fill="none" stroke="{stroke}" stroke-width="1.5" '
@@ -145,14 +144,14 @@ def make_join_diagram(
         if rel:
             label_lines = []
             join_t = rel.join_type.upper()
-            card   = rel.cardinality or ""
+            card = rel.cardinality or ""
             label_lines.append(f"{join_t}{f' ({card})' if card else ''}")
             label_lines.append(f"{rel.from_column} → {rel.to_column}")
 
-            pill_w  = max(len(l) for l in label_lines) * 6 + 16
-            pill_h  = 28
-            pill_x  = (x1 + x2) / 2 - pill_w / 2
-            pill_y  = cy - pill_h // 2 - 18
+            pill_w = max(len(l) for l in label_lines) * 6 + 16
+            pill_h = 28
+            pill_x = (x1 + x2) / 2 - pill_w / 2
+            pill_y = cy - pill_h // 2 - 18
 
             parts.append(
                 f'<rect x="{pill_x:.0f}" y="{pill_y:.0f}" '
@@ -160,12 +159,12 @@ def make_join_diagram(
                 f'rx="4" fill="#ffffff" stroke="#e2e4e8" stroke-width="0.5" opacity="0.95"/>'
             )
             parts.append(
-                f'<text x="{pill_x + pill_w/2:.0f}" y="{pill_y + 11:.0f}" '
+                f'<text x="{pill_x + pill_w / 2:.0f}" y="{pill_y + 11:.0f}" '
                 f'font-family="{_FONT}" font-size="9" font-weight="500" '
                 f'fill="#374151" text-anchor="middle">{html.escape(label_lines[0])}</text>'
             )
             parts.append(
-                f'<text x="{pill_x + pill_w/2:.0f}" y="{pill_y + 22:.0f}" '
+                f'<text x="{pill_x + pill_w / 2:.0f}" y="{pill_y + 22:.0f}" '
                 f'font-family="{_FONT}" font-size="8" '
                 f'fill="#6b7280" text-anchor="middle">{html.escape(label_lines[1])}</text>'
             )
@@ -189,8 +188,8 @@ def make_join_diagram(
     # --- Legend ---
     ly = _ROW_Y + _NODE_H + 16
     legend_items = [
-        (_COL_ENTITY,    "Entity"),
-        (_COL_ASSOC,     "Associative"),
+        (_COL_ENTITY, "Entity"),
+        (_COL_ASSOC, "Associative"),
         (_COL_REFERENCE, "Reference"),
     ]
     lx = _MARGIN

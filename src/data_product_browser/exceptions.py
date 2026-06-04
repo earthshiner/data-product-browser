@@ -47,7 +47,7 @@ class ObjectNotFoundError(DataProductError):
             f"Object '{self.object_name}' does not exist.\n\n"
             f"  Check that the product name is correct and the data product\n"
             f"  databases have been fully deployed:\n\n"
-            f"    data-product-guide generate {self.product_name}   ← verify this spelling"
+            f"    data-product-browser generate {self.product_name}   ← verify this spelling"
         )
 
 
@@ -58,7 +58,7 @@ class LoginError(DataProductError):
         return (
             "Login failed — the username or password is incorrect.\n\n"
             "  Re-store your password:\n\n"
-            "    data-product-guide store-password"
+            "    data-product-browser store-password"
         )
 
 
@@ -85,7 +85,7 @@ class SnapshotNotFoundError(DataProductError):
         return (
             f"Snapshot file not found: {self.path}\n\n"
             f"  Create one first:\n\n"
-            f"    data-product-guide dump <product> --output {self.path}"
+            f"    data-product-browser dump <product> --output {self.path}"
         )
 
 
@@ -101,7 +101,7 @@ class InvalidSnapshotError(DataProductError):
             f"Snapshot file '{self.path}' is invalid or corrupted.\n\n"
             f"  Detail: {self.detail}\n\n"
             f"  Re-generate a fresh snapshot:\n\n"
-            f"    data-product-guide dump <product> --output {self.path}"
+            f"    data-product-browser dump <product> --output {self.path}"
         )
 
 
@@ -112,10 +112,7 @@ class InvalidArtefactError(DataProductError):
         self.value = value
 
     def __str__(self) -> str:
-        return (
-            f"Unknown artefact '{self.value}'.\n\n"
-            f"  Valid choices: all, cookbook, ops"
-        )
+        return f"Unknown artefact '{self.value}'.\n\n  Valid choices: all, cookbook, ops"
 
 
 # ---------------------------------------------------------------------------
@@ -160,9 +157,7 @@ def parse_teradata_error(
     obj_match = _OBJECT_RE.search(msg)
     obj = obj_match.group(1) if obj_match else "unknown object"
 
-    context_line = (
-        f"\n\n  Failed while querying: {query_context}" if query_context else ""
-    )
+    context_line = f"\n\n  Failed while querying: {query_context}" if query_context else ""
 
     if code == 3523:
         return AccessDeniedError(obj, user, product_name)
@@ -203,6 +198,5 @@ def parse_teradata_error(
     # Unknown error — include the query context so the user knows where it failed
     first_line = msg.splitlines()[0]
     return DataProductError(
-        f"Teradata error while querying '{product_name}'.{context_line}\n\n"
-        f"  {first_line}"
+        f"Teradata error while querying '{product_name}'.{context_line}\n\n  {first_line}"
     )

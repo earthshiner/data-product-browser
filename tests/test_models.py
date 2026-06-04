@@ -11,7 +11,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from data_product_guide.models import (
+from data_product_browser.models import (
     ColumnMetadata,
     DataLineage,
     DataProduct,
@@ -23,8 +23,8 @@ from data_product_guide.models import (
     Recipe,
     TableRelationship,
 )
-from data_product_guide.renderers.sql_highlight import highlight_sql
-from data_product_guide.renderers.svg import make_join_diagram
+from data_product_browser.renderers.sql_highlight import highlight_sql
+from data_product_browser.renderers.svg import make_join_diagram
 
 
 # ---------------------------------------------------------------------------
@@ -35,7 +35,7 @@ def _minimal_product() -> DataProduct:
     today = date.today()
     return DataProduct(
         product_name="TestProduct",
-        generated_at=datetime.now(timezone.utc),
+        generated_dts=datetime.now(timezone.utc),
         modules=[
             ProductMap(
                 map_key=1,
@@ -186,7 +186,7 @@ class TestLineageModels:
         from datetime import datetime, timezone
         dp = DataProduct(
             product_name="X",
-            generated_at=datetime.now(timezone.utc),
+            generated_dts=datetime.now(timezone.utc),
         )
         assert dp.data_lineage == []
         assert dp.lineage_graph == []
@@ -266,7 +266,7 @@ class TestSvgDiagram:
 
 class TestRenderers:
     def test_cookbook_renders(self):
-        from data_product_guide.renderers.cookbook import render_cookbook
+        from data_product_browser.renderers.cookbook import render_cookbook
         dp = _minimal_product()
         html = render_cookbook(dp)
         assert "TestProduct" in html
@@ -275,7 +275,7 @@ class TestRenderers:
         assert "borrower_name" in html
 
     def test_ops_dashboard_renders(self):
-        from data_product_guide.renderers.ops_dashboard import render_ops_dashboard
+        from data_product_browser.renderers.ops_dashboard import render_ops_dashboard
         dp = _minimal_product()
         html = render_ops_dashboard(dp)
         assert "TestProduct" in html
@@ -284,7 +284,7 @@ class TestRenderers:
 
     def test_ops_data_is_valid_json(self):
         import re
-        from data_product_guide.renderers.ops_dashboard import render_ops_dashboard
+        from data_product_browser.renderers.ops_dashboard import render_ops_dashboard
         dp = _minimal_product()
         html = render_ops_dashboard(dp)
         match = re.search(r"window\.__DATA__\s*=\s*(\{.*?\});", html, re.DOTALL)
@@ -299,7 +299,7 @@ class TestRenderers:
 
 class TestExceptions:
     def test_access_denied_message(self):
-        from data_product_guide.exceptions import AccessDeniedError
+        from data_product_browser.exceptions import AccessDeniedError
         err = AccessDeniedError(
             "MortgagePlatform_Semantic.data_product_map", "pd185014", "MortgagePlatform"
         )
@@ -310,32 +310,32 @@ class TestExceptions:
         assert "GRANT SELECT ON MortgagePlatform_Observability TO pd185014" in msg
 
     def test_object_not_found_message(self):
-        from data_product_guide.exceptions import ObjectNotFoundError
+        from data_product_browser.exceptions import ObjectNotFoundError
         err = ObjectNotFoundError("MortgagePlatform_Semantic.data_product_map", "MortgagePlatform")
         msg = str(err)
         assert "does not exist" in msg
         assert "MortgagePlatform_Semantic.data_product_map" in msg
 
     def test_login_error_message(self):
-        from data_product_guide.exceptions import LoginError
+        from data_product_browser.exceptions import LoginError
         msg = str(LoginError())
         assert "Login failed" in msg
         assert "store-password" in msg
 
     def test_snapshot_not_found_message(self):
-        from data_product_guide.exceptions import SnapshotNotFoundError
+        from data_product_browser.exceptions import SnapshotNotFoundError
         msg = str(SnapshotNotFoundError("./snapshots/test.json"))
         assert "not found" in msg
         assert "dump" in msg
 
     def test_invalid_artefact_message(self):
-        from data_product_guide.exceptions import InvalidArtefactError
+        from data_product_browser.exceptions import InvalidArtefactError
         msg = str(InvalidArtefactError("badvalue"))
         assert "badvalue" in msg
         assert "all, cookbook, ops" in msg
 
     def test_parse_3523_returns_access_denied(self):
-        from data_product_guide.exceptions import AccessDeniedError, parse_teradata_error
+        from data_product_browser.exceptions import AccessDeniedError, parse_teradata_error
 
         class FakeOpError(Exception):
             pass
@@ -350,7 +350,7 @@ class TestExceptions:
         assert "MortgagePlatform_Semantic.data_product_map" in result.object_name
 
     def test_parse_3807_returns_object_not_found(self):
-        from data_product_guide.exceptions import ObjectNotFoundError, parse_teradata_error
+        from data_product_browser.exceptions import ObjectNotFoundError, parse_teradata_error
 
         class FakeOpError(Exception):
             pass
@@ -361,7 +361,7 @@ class TestExceptions:
         assert isinstance(result, ObjectNotFoundError)
 
     def test_parse_5315_includes_grant_instructions(self):
-        from data_product_guide.exceptions import DataProductError, parse_teradata_error
+        from data_product_browser.exceptions import DataProductError, parse_teradata_error
 
         class FakeOpError(Exception):
             pass
@@ -383,7 +383,7 @@ class TestExceptions:
         assert "GRANT SELECT ON DBC.TablesV TO <view_owner>" in msg
 
     def test_parse_5315_with_owner_uses_real_name(self):
-        from data_product_guide.exceptions import parse_teradata_error
+        from data_product_browser.exceptions import parse_teradata_error
 
         class FakeOpError(Exception):
             pass
@@ -404,7 +404,7 @@ class TestExceptions:
         assert "View owner: MPC_Server_User" in msg
 
     def test_parse_unknown_error_includes_query_context(self):
-        from data_product_guide.exceptions import parse_teradata_error
+        from data_product_browser.exceptions import parse_teradata_error
 
         class FakeOpError(Exception):
             pass
@@ -417,3 +417,4 @@ class TestExceptions:
         )
         msg = str(result)
         assert "MortgagePlatform_Semantic.some_table" in msg
+
