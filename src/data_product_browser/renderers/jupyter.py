@@ -76,9 +76,7 @@ def make_python_code(recipe: Recipe) -> str:
         lines.append("}\n")
         param_block = "\n" + "".join(lines)
 
-    run_call = (
-        "df = run_query(sql, params)" if params else "df = run_query(sql)"
-    )
+    run_call = "df = run_query(sql, params)" if params else "df = run_query(sql)"
 
     body = (
         f"\n{_CONN_CELL}\n\n"
@@ -165,4 +163,3 @@ def notebook_data_uri(recipe: Recipe, product_name: str) -> str:
     nb_json = json.dumps(make_notebook(recipe, product_name), indent=2)
     encoded = base64.b64encode(nb_json.encode("utf-8")).decode("ascii")
     return f"data:application/json;base64,{encoded}"
-

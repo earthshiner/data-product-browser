@@ -8,3 +8,6 @@ dist/
 .ruff_cache/
 *.html
 !src/tdp_reporter/renderers/templates/*.html.j2
+
+# local export artefacts
+repo-export.zip

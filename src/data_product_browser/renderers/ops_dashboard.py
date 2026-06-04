@@ -114,24 +114,30 @@ def _build_data(dp: DataProduct) -> dict:
     # --- Data Freshness (Panel 2) from lineage_runs --------------------------
     freshness_rows = []
     for r in dp.lineage_runs:
-        age_h = (dp.generated_dts - r.run_dts.replace(tzinfo=dp.generated_dts.tzinfo
-                 if r.run_dts.tzinfo is None else r.run_dts.tzinfo)).total_seconds() / 3600
+        age_h = (
+            dp.generated_dts
+            - r.run_dts.replace(
+                tzinfo=dp.generated_dts.tzinfo if r.run_dts.tzinfo is None else r.run_dts.tzinfo
+            )
+        ).total_seconds() / 3600
         if age_h <= 24:
             status = "FRESH"
         elif age_h <= 48:
             status = "STALE"
         else:
             status = "CRITICAL"
-        freshness_rows.append({
-            "job": r.job_name or f"lineage_{r.lineage_id}",
-            "run_dts": r.run_dts.isoformat(),
-            "run_status": r.run_status,
-            "freshness_status": status,
-            "freshness_hours": round(age_h, 1),
-            "duration_ms": r.run_duration_ms,
-            "records_written": r.records_written,
-            "error": r.error_message,
-        })
+        freshness_rows.append(
+            {
+                "job": r.job_name or f"lineage_{r.lineage_id}",
+                "run_dts": r.run_dts.isoformat(),
+                "run_status": r.run_status,
+                "freshness_status": status,
+                "freshness_hours": round(age_h, 1),
+                "duration_ms": r.run_duration_ms,
+                "records_written": r.records_written,
+                "error": r.error_message,
+            }
+        )
 
     fresh_count = sum(1 for r in freshness_rows if r["freshness_status"] == "FRESH")
     stale_count = sum(1 for r in freshness_rows if r["freshness_status"] == "STALE")
@@ -233,4 +239,3 @@ def render_ops_dashboard(dp: DataProduct) -> str:
         generated_dts=dp.generated_dts.strftime("%Y-%m-%d %H:%M UTC"),
         data_json=data_json,
     )
-

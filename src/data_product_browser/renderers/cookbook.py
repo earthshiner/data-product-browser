@@ -48,28 +48,31 @@ def _build_context(dp: DataProduct) -> dict:
         # Filter relationships to only those between tables in this recipe
         recipe_tables_upper = {t.upper() for t in tables_in_sql}
         recipe_rels = [
-            rel for rel in dp.relationships
+            rel
+            for rel in dp.relationships
             if rel.from_table.upper() in recipe_tables_upper
             and rel.to_table.upper() in recipe_tables_upper
         ]
-        enriched_recipes.append({
-            "recipe": r,
-            "sql_html": highlight_sql(r.sql_template),
-            "join_diagram": make_join_diagram(
-                tables_in_sql,
-                relationships=recipe_rels,
-                entities=dp.entities,
-            ),
-            "column_erd": make_column_erd(
-                tables_in_sql,
-                dp.columns,
-                dp.relationships,
-                dp.entities,
-            ),
-            "jupyter_code": make_python_code(r),
-            "notebook_uri": notebook_data_uri(r, dp.product_name),
-            "notebook_filename": f"{r.recipe_id}.ipynb",
-        })
+        enriched_recipes.append(
+            {
+                "recipe": r,
+                "sql_html": highlight_sql(r.sql_template),
+                "join_diagram": make_join_diagram(
+                    tables_in_sql,
+                    relationships=recipe_rels,
+                    entities=dp.entities,
+                ),
+                "column_erd": make_column_erd(
+                    tables_in_sql,
+                    dp.columns,
+                    dp.relationships,
+                    dp.entities,
+                ),
+                "jupyter_code": make_python_code(r),
+                "notebook_uri": notebook_data_uri(r, dp.product_name),
+                "notebook_filename": f"{r.recipe_id}.ipynb",
+            }
+        )
 
     # Group glossary by category
     glossary_by_cat: dict[str, list] = defaultdict(list)
@@ -115,4 +118,3 @@ def render_cookbook(dp: DataProduct) -> str:
     env.filters["highlight_sql"] = highlight_sql
     template = env.get_template("cookbook.html.j2")
     return template.render(**_build_context(dp))
-

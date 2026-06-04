@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ai-native-data-product-guide"
+name = "data-product-browser"
 version = "0.1.0"
 description = "Generate AI-Native Data Product artefacts (Cookbook, Ops Dashboard) from Teradata metadata"
 readme = "README.md"
@@ -20,10 +20,10 @@ dependencies = [
 ]
 
 [project.scripts]
-data-product-guide = "data_product_guide.cli:main"
+data-product-browser = "data_product_browser.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/data_product_guide"]
+packages = ["src/data_product_browser"]
 
 [dependency-groups]
 dev = [

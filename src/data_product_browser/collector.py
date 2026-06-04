@@ -43,21 +43,20 @@ def _fix(value: Any) -> Any:
     """
     if isinstance(value, str):
         import ftfy
+
         return ftfy.fix_text(value)
     return value
 
 
 def _rows(cursor: Any, model_class: type) -> list:
     cols = [d[0].lower() for d in cursor.description]
-    return [
-        model_class(**{k: _fix(v) for k, v in zip(cols, row)})
-        for row in cursor.fetchall()
-    ]
+    return [model_class(**{k: _fix(v) for k, v in zip(cols, row)}) for row in cursor.fetchall()]
 
 
 def _table_from_sql(sql: str) -> str:
     """Extract the first fully-qualified table reference from a SQL string."""
     import re
+
     m = re.search(r"FROM\s+([A-Za-z0-9_]+\.[A-Za-z0-9_]+)", sql, re.IGNORECASE)
     return m.group(1) if m else sql.strip().splitlines()[0][:60]
 
@@ -70,7 +69,10 @@ def _run(cursor: Any, sql: str, model_class: type, product_name: str, user: str,
     except Exception as exc:
         if "teradatasql" in type(exc).__module__ or "OperationalError" in type(exc).__name__:
             raise parse_teradata_error(
-                exc, product_name, user, host,
+                exc,
+                product_name,
+                user,
+                host,
                 query_context=_table_from_sql(sql),
             ) from None
         raise
@@ -123,7 +125,10 @@ def _run_optional(
                     view_owner = _lookup_view_owner(connection, parts[0], parts[1])
 
             friendly = parse_teradata_error(
-                exc, product_name, user, host,
+                exc,
+                product_name,
+                user,
+                host,
                 query_context=warn_label,
                 view_owner=view_owner,
             )
@@ -161,13 +166,14 @@ def collect(
         return _run(cur, sql, model_class, product_name, user, host)
 
     def q_opt(sql: str, model_class: type, label: str) -> list:
-        rows, warn = _run_optional(cur, connection, sql, model_class, product_name, user, host, label)
+        rows, warn = _run_optional(
+            cur, connection, sql, model_class, product_name, user, host, label
+        )
         if warn:
             warnings.append(warn)
         return rows
 
     with connection.cursor() as cur:
-
         # --- Semantic -------------------------------------------------------
 
         modules = q(
@@ -290,4 +296,3 @@ def collect(
         data_lineage=data_lineage,
         lineage_graph=lineage_graph,
     ), warnings
-

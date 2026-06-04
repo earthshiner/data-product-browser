@@ -385,4 +385,3 @@ class DataProduct(_Base):
 
     # Semantic (view over Observability)
     lineage_graph: list[LineageGraphEdge] = []
-

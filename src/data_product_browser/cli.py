@@ -1,15 +1,15 @@
 """CLI entry point.
 
 Usage:
-    data-product-guide store-password              # save credentials to system keyring
-    data-product-guide generate MortgagePlatform --output ./output
-    data-product-guide generate MortgagePlatform --artefact cookbook
-    data-product-guide dump    MortgagePlatform --output ./output/data.json
-    data-product-guide render  ./output/data.json  --output ./output
+    data-product-browser store-password              # save credentials to system keyring
+    data-product-browser generate MortgagePlatform --output ./output
+    data-product-browser generate MortgagePlatform --artefact cookbook
+    data-product-browser dump    MortgagePlatform --output ./output/data.json
+    data-product-browser render  ./output/data.json  --output ./output
 
 Password resolution order:
     1. TD_PASSWORD environment variable (session-only, never written to disk)
-    2. System keyring  (stored via `data-product-guide store-password`)
+    2. System keyring  (stored via `data-product-browser store-password`)
     3. Interactive prompt (masked, not echoed)
 """
 
@@ -33,7 +33,7 @@ from .exceptions import (
 from .renderers.cookbook import render_cookbook
 from .renderers.ops_dashboard import render_ops_dashboard
 
-_KEYRING_SERVICE = "data-product-guide"
+_KEYRING_SERVICE = "data-product-browser"
 _VALID_ARTEFACTS = ("all", "cookbook", "ops")
 
 app = typer.Typer(
@@ -56,6 +56,7 @@ def _get_password(host: str, user: str) -> str:
 
     try:
         import keyring
+
         pwd = keyring.get_password(_KEYRING_SERVICE, f"{user}@{host}")
         if pwd:
             return pwd
@@ -75,16 +76,10 @@ def _connect():
 
     if not host:
         _abort(
-            "TD_HOST is not set.\n\n"
-            "  Add it to your .env file:\n\n"
-            "    TD_HOST=your-teradata-host"
+            "TD_HOST is not set.\n\n  Add it to your .env file:\n\n    TD_HOST=your-teradata-host"
         )
     if not user:
-        _abort(
-            "TD_USER is not set.\n\n"
-            "  Add it to your .env file:\n\n"
-            "    TD_USER=your-username"
-        )
+        _abort("TD_USER is not set.\n\n  Add it to your .env file:\n\n    TD_USER=your-username")
 
     password = _get_password(host, user)
 
@@ -96,7 +91,7 @@ def _connect():
             _abort(
                 "Login failed — the username or password is incorrect.\n\n"
                 "  Re-store your password:\n\n"
-                "    data-product-guide store-password"
+                "    data-product-browser store-password"
             )
         if "unable to connect" in msg.lower() or "connection refused" in msg.lower():
             _abort(
@@ -134,7 +129,7 @@ def store_password():
         _abort(f"Could not save to system keyring:\n\n  {exc}")
 
     typer.echo(f"\n✔  Password stored for {user}@{host}.")
-    typer.echo("   Run `data-product-guide generate <product>` — no password prompt needed.\n")
+    typer.echo("   Run `data-product-browser generate <product>` — no password prompt needed.\n")
 
 
 @app.command()
@@ -154,7 +149,7 @@ def generate(
     except OSError as exc:
         _abort(f"Cannot create output directory '{output}':\n\n  {exc}")
 
-    typer.echo(f"\ndata-product-guide {__version__} — connecting to Teradata…")
+    typer.echo(f"\ndata-product-browser {__version__} — connecting to Teradata…")
     conn = _connect()
 
     try:
@@ -270,4 +265,3 @@ def render(
 
 def main() -> None:
     app()
-

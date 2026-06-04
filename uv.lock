@@ -3,47 +3,6 @@ revision = 2
 requires-python = ">=3.11"
 
 [[package]]
-name = "ai-native-data-product-guide"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "ftfy" },
-    { name = "jinja2" },
-    { name = "keyring" },
-    { name = "pydantic" },
-    { name = "pygments" },
-    { name = "python-dotenv" },
-    { name = "teradatasql" },
-    { name = "typer" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "ftfy", specifier = ">=6.0" },
-    { name = "jinja2", specifier = ">=3.1" },
-    { name = "keyring", specifier = ">=25.0" },
-    { name = "pydantic", specifier = ">=2.0" },
-    { name = "pygments", specifier = ">=2.17" },
-    { name = "python-dotenv", specifier = ">=1.0" },
-    { name = "teradatasql", specifier = ">=20.0" },
-    { name = "typer", extras = ["all"], specifier = ">=0.12" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8.0" },
-    { name = "pytest-cov", specifier = ">=5.0" },
-    { name = "ruff", specifier = ">=0.4" },
-]
-
-[[package]]
 name = "annotated-doc"
 version = "0.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -286,6 +245,47 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f0/0a/7e226dbff530f21480727eb764973a7bff2b912f8e15cd4f129e71b56d1d/cryptography-48.0.0-pp311-pypy311_pp73-manylinux_2_28_x86_64.whl", hash = "sha256:0890f502ddf7d9c6426129c3f49f5c0a39278ed7cd6322c8755ffca6ee675a13", size = 4667270, upload-time = "2026-05-04T22:59:22.647Z" },
     { url = "https://files.pythonhosted.org/packages/3b/f2/5a72274ca9f1b2a8b44a662ee0bf1b435909deb473d6f97bcd035bcdbc71/cryptography-48.0.0-pp311-pypy311_pp73-manylinux_2_34_aarch64.whl", hash = "sha256:ecde28a596bead48b0cfd2a1b4416c3d43074c2d785e3a398d7ec1fc4d0f7fbb", size = 4636797, upload-time = "2026-05-04T22:59:24.912Z" },
     { url = "https://files.pythonhosted.org/packages/b4/e1/48cedb2fe63626e91ded1edad159e2a4fb8b6906c4425eb7749673077ce7/cryptography-48.0.0-pp311-pypy311_pp73-manylinux_2_34_x86_64.whl", hash = "sha256:4defde8685ae324a9eb9d818717e93b4638ef67070ac9bc15b8ca85f63048355", size = 4666800, upload-time = "2026-05-04T22:59:27.474Z" },
+]
+
+[[package]]
+name = "data-product-browser"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "ftfy" },
+    { name = "jinja2" },
+    { name = "keyring" },
+    { name = "pydantic" },
+    { name = "pygments" },
+    { name = "python-dotenv" },
+    { name = "teradatasql" },
+    { name = "typer" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ftfy", specifier = ">=6.0" },
+    { name = "jinja2", specifier = ">=3.1" },
+    { name = "keyring", specifier = ">=25.0" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pygments", specifier = ">=2.17" },
+    { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "teradatasql", specifier = ">=20.0" },
+    { name = "typer", extras = ["all"], specifier = ">=0.12" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest-cov", specifier = ">=5.0" },
+    { name = "ruff", specifier = ">=0.4" },
 ]
 
 [[package]]

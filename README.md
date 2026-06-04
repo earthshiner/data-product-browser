@@ -1,4 +1,4 @@
-# ai-native-data-product-guide
+# data-product-browser
 
 Generate AI-Native Data Product artefacts (Cookbook, Ops Dashboard) deterministically from Teradata metadata.
 
