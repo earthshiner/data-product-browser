@@ -87,6 +87,26 @@
       display: inline-block; font-size: 10px; padding: 1px 8px; border-radius: 10px;
       border: 1px solid var(--border); color: var(--muted); margin-right: 6px;
     }
+    .nav-special {
+      padding: 8px 10px; border-radius: 6px; cursor: pointer; font-weight: 600;
+      margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
+    }
+    .nav-special:hover { background: var(--panel-2); }
+    .nav-special.active { background: var(--accent-dim); }
+    .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 22px; }
+    .stat {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+      border-left: 3px solid var(--muted);
+    }
+    .stat.ok { border-left-color: var(--ok); }
+    .stat.bad { border-left-color: var(--pii); }
+    .stat.warn { border-left-color: var(--warn); }
+    .stat .big { font-size: 26px; font-weight: 700; }
+    .stat .lbl { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    .status-ok { color: var(--ok); font-weight: 600; }
+    .status-bad { color: var(--pii); font-weight: 600; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .section-title { font-size: 15px; margin: 26px 0 8px; }
   </style>
 </head>
 <body>

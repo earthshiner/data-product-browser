@@ -10,6 +10,7 @@ const state = {
   data: null, // the DataProduct object
   activeEntity: null, // entity_metadata_key
   activeTab: "schema",
+  view: "health", // "health" | "entity"
 };
 
 const el = (id) => document.getElementById(id);
@@ -62,10 +63,10 @@ async function loadProduct(name) {
     );
     state.data = data_product;
     state.warnings = warnings || [];
+    state.view = "health";
+    state.activeEntity = null;
     renderTree();
-    el("detail").innerHTML =
-      '<div class="empty">Select an entity from the left to view its schema.</div>';
-    renderWarnings();
+    showHealth();
     const counts = data_product;
     setStatus(
       `${counts.entities.length} entities · ${counts.columns.length} columns · ` +
@@ -100,6 +101,19 @@ function renderTree() {
   const filter = el("filter").value.trim().toLowerCase();
   const tree = el("tree");
   tree.innerHTML = "";
+
+  const health = document.createElement("div");
+  health.className = "nav-special" + (state.view === "health" ? " active" : "");
+  health.innerHTML = "<span>📊</span><span>Product Health</span>";
+  health.onclick = () => {
+    state.view = "health";
+    state.activeEntity = null;
+    renderTree();
+    showHealth();
+    el("detail").scrollTop = 0;
+  };
+  tree.appendChild(health);
+
   for (const [moduleName, entities] of entitiesByModule()) {
     const visible = entities.filter(
       (e) => !filter || e.entity_name.toLowerCase().includes(filter),
@@ -130,6 +144,7 @@ function columnsFor(entity) {
 
 function selectEntity(key) {
   state.activeEntity = key;
+  state.view = "entity";
   renderTree();
   const entity = state.data.entities.find((e) => e.entity_metadata_key === key);
   if (!entity) return;
@@ -306,6 +321,126 @@ function decisionsHTML(entity) {
       </div>`,
     )
     .join("");
+}
+
+// --- product health dashboard ------------------------------------------------
+
+const MAX_ROWS = 50; // cap long observability tables
+
+function fmtNum(n) {
+  return n == null ? "—" : Number(n).toLocaleString();
+}
+
+function fmtDate(s) {
+  if (!s) return "—";
+  return String(s).replace("T", " ").slice(0, 16);
+}
+
+// Human-friendly age between an ISO timestamp and the snapshot's generated time.
+function ago(s, now) {
+  if (!s) return "—";
+  const then = new Date(s).getTime();
+  const ms = now - then;
+  if (isNaN(ms)) return "—";
+  const h = ms / 3.6e6;
+  if (h < 1) return Math.max(0, Math.round(h * 60)) + "m ago";
+  if (h < 48) return Math.round(h) + "h ago";
+  return Math.round(h / 24) + "d ago";
+}
+
+function showHealth() {
+  const d = state.data;
+  const now = new Date(d.generated_dts).getTime();
+
+  const qBelow = d.quality_metrics.filter((m) => m.is_below_threshold).length;
+  const failedRuns = d.lineage_runs.filter((r) => /fail|error/i.test(r.run_status || "")).length;
+  const failedChanges = d.change_events.filter((c) => !c.is_successful).length;
+  const lastRun = d.lineage_runs[0]; // collector orders by run_dts DESC
+
+  const stat = (cls, big, lbl) =>
+    `<div class="stat ${cls}"><div class="big">${big}</div><div class="lbl">${lbl}</div></div>`;
+
+  const cards = `<div class="summary-cards">
+    ${stat(qBelow ? "bad" : "ok", `${qBelow}/${d.quality_metrics.length}`, "Quality metrics below threshold")}
+    ${stat(failedRuns ? "bad" : "ok", failedRuns, "Failed lineage runs")}
+    ${stat(failedChanges ? "warn" : "ok", failedChanges, "Failed change events")}
+    ${stat("", lastRun ? ago(lastRun.run_dts, now) : "—", "Last lineage run")}
+  </div>`;
+
+  el("detail").innerHTML = `
+    <h2>${esc(d.product_name)} — Product Health</h2>
+    <p class="sub">Snapshot ${fmtDate(d.generated_dts)} UTC · observability window from collection</p>
+    ${cards}
+    ${qualityTable(d)}
+    ${lineageTable(d, now)}
+    ${changeTable(d)}`;
+  renderWarnings();
+}
+
+function truncNote(total) {
+  return total > MAX_ROWS ? `<p class="sub">Showing ${MAX_ROWS} of ${total}.</p>` : "";
+}
+
+function qualityTable(d) {
+  if (!d.quality_metrics.length) return "";
+  const rows = d.quality_metrics
+    .slice(0, MAX_ROWS)
+    .map(
+      (m) => `<tr>
+        <td><code>${esc(m.database_name)}.${esc(m.table_name)}</code></td>
+        <td>${esc(m.metric_name)}</td>
+        <td class="num">${fmtNum(m.metric_value)}</td>
+        <td class="num">${fmtNum(m.threshold_value)}</td>
+        <td class="${m.is_below_threshold ? "status-bad" : "status-ok"}">${m.is_below_threshold ? "BELOW" : "OK"}</td>
+        <td>${fmtDate(m.measured_dts)}</td>
+      </tr>`,
+    )
+    .join("");
+  return `<h3 class="section-title">Data quality</h3>${truncNote(d.quality_metrics.length)}
+    <table><thead><tr><th>Object</th><th>Metric</th><th>Value</th><th>Threshold</th><th>Status</th><th>Measured</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function lineageTable(d, now) {
+  if (!d.lineage_runs.length) return "";
+  const rows = d.lineage_runs
+    .slice(0, MAX_ROWS)
+    .map((r) => {
+      const failed = /fail|error/i.test(r.run_status || "");
+      return `<tr>
+        <td>${esc(r.job_name) || "—"}</td>
+        <td class="${failed ? "status-bad" : "status-ok"}">${esc(r.run_status)}</td>
+        <td>${ago(r.run_dts, now)}</td>
+        <td class="num">${fmtNum(r.run_duration_ms)}</td>
+        <td class="num">${fmtNum(r.records_read)}</td>
+        <td class="num">${fmtNum(r.records_written)}</td>
+        <td class="num">${fmtNum(r.records_rejected)}</td>
+      </tr>`;
+    })
+    .join("");
+  return `<h3 class="section-title">Lineage runs</h3>${truncNote(d.lineage_runs.length)}
+    <table><thead><tr><th>Job</th><th>Status</th><th>When</th><th>Duration ms</th><th>Read</th><th>Written</th><th>Rejected</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function changeTable(d) {
+  if (!d.change_events.length) return "";
+  const rows = d.change_events
+    .slice(0, MAX_ROWS)
+    .map(
+      (c) => `<tr>
+        <td>${fmtDate(c.event_dts)}</td>
+        <td><code>${esc(c.database_name)}.${esc(c.table_name)}</code></td>
+        <td>${esc(c.operation_type)}</td>
+        <td class="num">${fmtNum(c.records_affected)}</td>
+        <td>${esc(c.changed_by) || "—"}</td>
+        <td class="${c.is_successful ? "status-ok" : "status-bad"}">${c.is_successful ? "OK" : "FAILED"}</td>
+      </tr>`,
+    )
+    .join("");
+  return `<h3 class="section-title">Change activity</h3>${truncNote(d.change_events.length)}
+    <table><thead><tr><th>When</th><th>Object</th><th>Operation</th><th>Rows</th><th>By</th><th>Status</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
 }
 
 el("product-select").addEventListener("change", (e) => loadProduct(e.target.value));
