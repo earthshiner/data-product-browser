@@ -271,7 +271,7 @@ def collect(
 
     return DataProduct(
         product_name=product_name,
-        generated_at=datetime.now(timezone.utc),
+        generated_dts=datetime.now(timezone.utc),
         modules=modules,
         entities=entities,
         columns=columns,
@@ -290,3 +290,4 @@ def collect(
         data_lineage=data_lineage,
         lineage_graph=lineage_graph,
     ), warnings
+

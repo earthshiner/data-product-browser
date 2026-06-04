@@ -331,3 +331,4 @@ def make_column_erd(
 
     parts.append("</svg>")
     return "".join(parts)
+

@@ -206,3 +206,4 @@ def parse_teradata_error(
         f"Teradata error while querying '{product_name}'.{context_line}\n\n"
         f"  {first_line}"
     )
+

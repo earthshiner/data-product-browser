@@ -98,7 +98,7 @@ main { max-width: 1480px; margin: 0 auto; padding: 24px 28px 60px; }
   </svg>
   <div>
     <div class="refresh-stamp">Generated</div>
-    <div style="color:var(--text);font-size:12px;">{{ generated_at }}</div>
+    <div style="color:var(--text);font-size:12px;">{{ generated_dts }}</div>
   </div>
 </header>
 
@@ -311,7 +311,7 @@ Object.entries(D.failures_by_table).forEach(([tbl, fails]) => {
          <td style="text-align:right;">${f.value ?? '—'}</td>
          <td style="text-align:right;">${f.threshold ?? '—'}</td>
          <td>${badge('FAIL','red')}</td>
-         <td style="color:var(--text-dim);">${fmtDts(f.measured_at)}</td>
+         <td style="color:var(--text-dim);">${fmtDts(f.measured_dts)}</td>
        </tr>`);
     qRows++;
   });
@@ -484,3 +484,4 @@ glossarySumEl.textContent = `${D.glossary.length} terms · ${D.entities.length} 
 </script>
 </body>
 </html>
+

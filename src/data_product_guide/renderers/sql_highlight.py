@@ -80,3 +80,4 @@ def highlight_sql(sql: str) -> str:
                 result.append(html.escape(tok))
 
     return "".join(result)
+

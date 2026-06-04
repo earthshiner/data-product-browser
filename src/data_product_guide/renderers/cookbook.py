@@ -88,7 +88,7 @@ def _build_context(dp: DataProduct) -> dict:
 
     return {
         "product_name": dp.product_name,
-        "generated_at": dp.generated_at.strftime("%Y-%m-%d %H:%M UTC"),
+        "generated_dts": dp.generated_dts.strftime("%Y-%m-%d %H:%M UTC"),
         "version": version,
         "recipe_count": len(dp.recipes),
         "module_count": len(dp.modules),
@@ -115,3 +115,4 @@ def render_cookbook(dp: DataProduct) -> str:
     env.filters["highlight_sql"] = highlight_sql
     template = env.get_template("cookbook.html.j2")
     return template.render(**_build_context(dp))
+

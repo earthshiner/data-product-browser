@@ -251,7 +251,7 @@ class QualityMetric(_Base):
     metric_value: Optional[float] = None
     threshold_value: Optional[float] = None
     is_below_threshold: int = 0
-    measured_at: datetime
+    measured_dts: datetime
     quality_context: Optional[str] = None
 
 
@@ -270,7 +270,7 @@ class LineageRun(_Base):
     job_name: Optional[str] = None
     openlineage_run_id: Optional[str] = None
     error_message: Optional[str] = None
-    created_at: Optional[datetime] = None
+    created_dts: Optional[datetime] = None
 
 
 class AgentOutcome(_Base):
@@ -323,7 +323,7 @@ class DataLineage(_Base):
     is_active: int = 1
     registered_dts: Optional[datetime] = None
     retired_dts: Optional[datetime] = None
-    created_at: Optional[datetime] = None
+    created_dts: Optional[datetime] = None
 
 
 class LineageGraphEdge(_Base):
@@ -359,7 +359,7 @@ class DataProduct(_Base):
     """Complete snapshot of one AI-Native Data Product, ready for rendering."""
 
     product_name: str
-    generated_at: datetime
+    generated_dts: datetime
 
     # Semantic
     modules: list[ProductMap] = []
@@ -385,3 +385,4 @@ class DataProduct(_Base):
 
     # Semantic (view over Observability)
     lineage_graph: list[LineageGraphEdge] = []
+

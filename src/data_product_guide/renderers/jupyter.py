@@ -165,3 +165,4 @@ def notebook_data_uri(recipe: Recipe, product_name: str) -> str:
     nb_json = json.dumps(make_notebook(recipe, product_name), indent=2)
     encoded = base64.b64encode(nb_json.encode("utf-8")).decode("ascii")
     return f"data:application/json;base64,{encoded}"
+

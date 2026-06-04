@@ -222,3 +222,4 @@ def make_join_diagram(
 
     parts.append("</svg>")
     return "".join(parts)
+

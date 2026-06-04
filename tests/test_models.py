@@ -35,7 +35,7 @@ def _minimal_product() -> DataProduct:
     today = date.today()
     return DataProduct(
         product_name="TestProduct",
-        generated_at=datetime.now(timezone.utc),
+        generated_dts=datetime.now(timezone.utc),
         modules=[
             ProductMap(
                 map_key=1,
@@ -186,7 +186,7 @@ class TestLineageModels:
         from datetime import datetime, timezone
         dp = DataProduct(
             product_name="X",
-            generated_at=datetime.now(timezone.utc),
+            generated_dts=datetime.now(timezone.utc),
         )
         assert dp.data_lineage == []
         assert dp.lineage_graph == []
@@ -417,3 +417,4 @@ class TestExceptions:
         )
         msg = str(result)
         assert "MortgagePlatform_Semantic.some_table" in msg
+
