@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 import uvicorn
 
 from data_product_browser.models import (
+    AgentOutcome,
     ChangeEvent,
     ColumnMetadata,
     DataLineage,
@@ -188,6 +189,19 @@ def _sample() -> DataProduct:
                 is_threshold_met=0,
                 measured_dts=NOW - timedelta(hours=3),
             ),
+            *[
+                QualityMetric(
+                    quality_metric_id=100 + i,
+                    database_name=DOM,
+                    table_name="Call_Current",
+                    metric_name="freshness",
+                    metric_value=0.9 + (i % 5) * 0.02,
+                    quality_threshold=0.95,
+                    is_threshold_met=0 if i % 4 == 0 else 1,
+                    measured_dts=NOW - timedelta(days=i),
+                )
+                for i in range(1, 14)
+            ],
         ],
         data_lineage=[
             DataLineage(
@@ -213,15 +227,27 @@ def _sample() -> DataProduct:
         ],
         change_events=[
             ChangeEvent(
-                change_event_id=1,
+                change_event_id=i,
                 database_name="CallCentre_DOM_STD_T",
-                table_name="Call_H",
-                change_type="INSERT",
-                change_dts=NOW - timedelta(hours=2),
-                records_affected=1200,
+                table_name="Call_H" if i % 2 else "Agent_H",
+                change_type="INSERT" if i % 3 else "MERGE",
+                change_dts=NOW - timedelta(days=i // 2, hours=i),
+                records_affected=1200 - i * 30,
                 changed_by="etl_svc",
                 change_source="batch",
-            ),
+            )
+            for i in range(1, 13)
+        ],
+        agent_outcomes=[
+            AgentOutcome(
+                outcome_id=i,
+                action_type=["query", "summarise", "classify"][i % 3],
+                action_dts=NOW - timedelta(days=i // 3, hours=i),
+                outcome_status="SUCCESS" if i % 4 else "FAILED",
+                execution_time_ms=200 + i * 40,
+                records_processed=i * 17,
+            )
+            for i in range(1, 16)
         ],
     )
 
