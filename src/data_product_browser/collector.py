@@ -1,17 +1,21 @@
-"""Extracts all metadata for one AI-Native Data Product from Teradata.
+"""Extracts metadata for AI-Native Data Products from Teradata.
 
-Each query targets the live Semantic, Memory, and Observability databases.
-The 90-day window on Observability tables keeps result sets practical;
-adjust via the ``lookback_days`` parameter if needed.
+Discovery is registry-driven. A top-level governance registry
+(``<registry_db>.active_data_product_registry``) names, per product, the view
+database for each module. The collector reads from those view databases (the
+business/standard view layer, never base tables) so it honours the object
+placement standard and adapts to each system's database naming.
+
+Every module query is best-effort: a missing table or a permission gap yields a
+warning rather than aborting the whole collection.
 """
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from typing import Any
 
-from .exceptions import parse_teradata_error
+from .config import resolve_registry_db
 from .models import (
     AgentOutcome,
     ChangeEvent,
@@ -23,24 +27,20 @@ from .models import (
     EntityMetadata,
     GlossaryTerm,
     ImplementationNote,
-    LineageGraphEdge,
-    LineageRun,
     ModuleRegistryEntry,
-    NamingStandard,
     ProductMap,
     QualityMetric,
     Recipe,
+    RegistryEntry,
     TableRelationship,
+    TrustReport,
 )
+
+_REGISTRY_TABLE = "active_data_product_registry"
 
 
 def _fix(value: Any) -> Any:
-    """Repair mojibake in string values (e.g. UTF-8 stored into a LATIN column).
-
-    Teradata LATIN-charset columns that contain UTF-8 bytes produce garbled
-    sequences like â€" (em-dash) or â€™ (curly quote). ftfy detects and
-    corrects these automatically without touching values that are already clean.
-    """
+    """Repair mojibake in string values (UTF-8 bytes stored in a LATIN column)."""
     if isinstance(value, str):
         import ftfy
 
@@ -53,236 +53,150 @@ def _rows(cursor: Any, model_class: type) -> list:
     return [model_class(**{k: _fix(v) for k, v in zip(cols, row)}) for row in cursor.fetchall()]
 
 
-def _table_from_sql(sql: str) -> str:
-    """Extract the first fully-qualified table reference from a SQL string."""
-    import re
+def discover_products(connection: Any, registry_db: str | None = None) -> list[RegistryEntry]:
+    """Return active products from the governance registry.
 
-    m = re.search(r"FROM\s+([A-Za-z0-9_]+\.[A-Za-z0-9_]+)", sql, re.IGNORECASE)
-    return m.group(1) if m else sql.strip().splitlines()[0][:60]
-
-
-def _run(cursor: Any, sql: str, model_class: type, product_name: str, user: str, host: str) -> list:
-    """Execute one query and return typed rows, converting DB errors to friendly exceptions."""
-    try:
-        cursor.execute(sql)
-        return _rows(cursor, model_class)
-    except Exception as exc:
-        if "teradatasql" in type(exc).__module__ or "OperationalError" in type(exc).__name__:
-            raise parse_teradata_error(
-                exc,
-                product_name,
-                user,
-                host,
-                query_context=_table_from_sql(sql),
-            ) from None
-        raise
-
-
-def _lookup_view_owner(connection: Any, database: str, view_name: str) -> str | None:
-    """Return the CreatorName for a view using a fresh cursor.
-
-    A fresh cursor is required because the calling cursor is in an error state
-    after the 5315 exception and cannot safely execute another query.
+    Args:
+        connection: Open teradatasql connection.
+        registry_db: Database holding ``active_data_product_registry``. When None,
+            resolved from the ``TDP_REGISTRY_DB`` env var or the standard default.
     """
-    try:
-        with connection.cursor() as fresh:
-            fresh.execute(
-                f"SELECT CreatorName FROM DBC.TablesV "
-                f"WHERE DatabaseName = '{database}' AND TableName = '{view_name}'"
-            )
-            row = fresh.fetchone()
-            return str(row[0]).strip() if row else None
-    except Exception:
-        return None
+    registry_db = resolve_registry_db(registry_db)
+    with connection.cursor() as cur:
+        cur.execute(
+            f"SELECT * FROM {registry_db}.{_REGISTRY_TABLE} "
+            f"WHERE product_status = 'ACTIVE' ORDER BY product_name"
+        )
+        return _rows(cur, RegistryEntry)
 
 
-def _run_optional(
-    cursor: Any,
-    connection: Any,
-    sql: str,
-    model_class: type,
-    product_name: str,
-    user: str,
-    host: str,
-    warn_label: str,
-) -> tuple[list, str | None]:
-    """Like _run, but on failure returns ([], warning_message) instead of raising.
-
-    Used for queries that depend on DBC system-table grants outside the
-    data product's control (e.g. lineage_graph → DBC.TablesV).
-    """
-    try:
-        cursor.execute(sql)
-        return _rows(cursor, model_class), None
-    except Exception as exc:
-        if "teradatasql" in type(exc).__module__ or "OperationalError" in type(exc).__name__:
-            # For 5315 errors, resolve the view owner on a fresh cursor so the
-            # GRANT statement uses the real name rather than a placeholder.
-            view_owner = None
-            if "[Error 5315]" in str(exc):
-                parts = warn_label.split(".")
-                if len(parts) == 2:
-                    view_owner = _lookup_view_owner(connection, parts[0], parts[1])
-
-            friendly = parse_teradata_error(
-                exc,
-                product_name,
-                user,
-                host,
-                query_context=warn_label,
-                view_owner=view_owner,
-            )
-            return [], f"⚠  Skipped {warn_label}:\n\n{str(friendly)}"
-        raise
+def _find_registry_entry(
+    connection: Any, product_name: str, registry_db: str | None
+) -> RegistryEntry | None:
+    for entry in discover_products(connection, registry_db):
+        if entry.product_name == product_name:
+            return entry
+    return None
 
 
 def collect(
     product_name: str,
     connection: Any,
+    registry_db: str | None = None,
     lookback_days: int = 90,
 ) -> tuple[DataProduct, list[str]]:
-    """Query all modules and return a fully populated DataProduct plus any warnings.
-
-    Returns:
-        (DataProduct, warnings) where warnings is a list of non-fatal messages
-        for queries that were skipped due to insufficient DBC grants.
+    """Query all modules for one product and return a DataProduct plus warnings.
 
     Args:
-        product_name:  Prefix used for all module databases, e.g. ``MortgagePlatform``.
-        connection:    Open teradatasql connection.
-        lookback_days: How far back to fetch Observability data.
+        product_name: The registry ``product_name`` (e.g. "CallCentre Data Product").
+        connection: Open teradatasql connection.
+        registry_db: Governance registry database. When None, resolved from env
+            (``TDP_REGISTRY_DB``) or the standard default.
+        lookback_days: Observability window for time-bounded tables.
     """
-    sem = f"{product_name}_Semantic"
-    mem = f"{product_name}_Memory"
-    obs = f"{product_name}_Observability"
-
-    # Resolve user/host for error messages — best effort
-    user = os.environ.get("TD_USER", "unknown_user")
-    host = os.environ.get("TD_HOST", "unknown_host")
-
+    registry_db = resolve_registry_db(registry_db)
     warnings: list[str] = []
 
-    def q(sql: str, model_class: type) -> list:
-        return _run(cur, sql, model_class, product_name, user, host)
+    entry = _find_registry_entry(connection, product_name, registry_db)
+    if entry is None:
+        raise ValueError(f"Product '{product_name}' not found in {registry_db}.{_REGISTRY_TABLE}.")
 
-    def q_opt(sql: str, model_class: type, label: str) -> list:
-        rows, warn = _run_optional(
-            cur, connection, sql, model_class, product_name, user, host, label
-        )
-        if warn:
-            warnings.append(warn)
-        return rows
+    sem = entry.semantic_view_database or entry.semantic_database
+    mem = entry.memory_view_database or entry.memory_database
+    obs = entry.observability_view_database or entry.observability_database
 
     with connection.cursor() as cur:
-        # --- Semantic -------------------------------------------------------
 
-        modules = q(
-            f"SELECT * FROM {sem}.data_product_map WHERE is_active = 1",
-            ProductMap,
+        def q_opt(db: str | None, table: str, model_class: type, suffix: str = "") -> list:
+            """Run one optional query; on failure append a warning and return []."""
+            if not db:
+                warnings.append(f"⚠  Skipped {table}: no database registered for its module.")
+                return []
+            ref = f"{db}.{table}"
+            try:
+                cur.execute(f"SELECT * FROM {ref}{(' ' + suffix) if suffix else ''}")
+                return _rows(cur, model_class)
+            except Exception as exc:
+                warnings.append(f"⚠  Skipped {ref}:\n\n  {str(exc).splitlines()[0]}")
+                return []
+
+        window = f"CURRENT_TIMESTAMP - INTERVAL '{int(lookback_days)}' DAY"
+        valid = "(valid_to IS NULL OR valid_to >= CURRENT_DATE)"
+
+        # --- Semantic -------------------------------------------------------
+        modules = q_opt(
+            sem, "data_product_map", ProductMap, "WHERE is_active = 1 ORDER BY module_id"
         )
-        entities = q(
-            f"SELECT * FROM {sem}.entity_metadata WHERE is_active = 1",
+        entities = q_opt(
+            sem,
+            "entity_metadata",
             EntityMetadata,
+            "WHERE is_active = 1 ORDER BY module_name, entity_name",
         )
-        columns = q(
-            f"SELECT * FROM {sem}.column_metadata WHERE is_active = 1",
-            ColumnMetadata,
-        )
-        relationships = q(
-            f"SELECT * FROM {sem}.table_relationship WHERE is_active = 1",
-            TableRelationship,
-        )
-        naming_standards = q(
-            f"SELECT * FROM {sem}.naming_standard WHERE is_active = 1 ORDER BY standard_type",
-            NamingStandard,
-        )
+        columns = q_opt(sem, "column_metadata", ColumnMetadata, "WHERE is_active = 1")
+        relationships = q_opt(sem, "table_relationship", TableRelationship, "WHERE is_active = 1")
+        trust_rows = q_opt(sem, "trust_engine_latest", TrustReport)
 
         # --- Memory ---------------------------------------------------------
-
-        recipes = q(
-            f"""SELECT * FROM {mem}.Query_Cookbook
-                WHERE is_active = 1 AND valid_to >= CURRENT_DATE
-                ORDER BY recipe_id""",
-            Recipe,
+        recipes = q_opt(
+            mem, "Query_Cookbook", Recipe, f"WHERE is_active = 1 AND {valid} ORDER BY recipe_id"
         )
-        glossary = q(
-            f"""SELECT * FROM {mem}.Business_Glossary
-                WHERE is_active = 1 AND valid_to >= CURRENT_DATE
-                ORDER BY term_category, term""",
+        glossary = q_opt(
+            mem,
+            "Business_Glossary",
             GlossaryTerm,
+            f"WHERE is_active = 1 AND {valid} ORDER BY term_category, term",
         )
-        decisions = q(
-            f"""SELECT * FROM {mem}.Design_Decision
-                WHERE is_current = 1 AND valid_to >= CURRENT_DATE
-                ORDER BY decision_category, decision_id""",
+        decisions = q_opt(
+            mem,
+            "Design_Decision",
             DesignDecision,
+            f"WHERE is_current = 1 AND {valid} ORDER BY decision_category, decision_id",
         )
-        module_registry = q(
-            f"""SELECT * FROM {mem}.Module_Registry
-                WHERE is_current = 1 AND valid_to >= CURRENT_DATE
-                ORDER BY module_name""",
+        module_registry = q_opt(
+            mem,
+            "Module_Registry",
             ModuleRegistryEntry,
+            f"WHERE is_current = 1 AND {valid} ORDER BY module_name",
         )
-        implementation_notes = q(
-            f"""SELECT * FROM {mem}.Implementation_Note
-                WHERE is_active = 1 AND valid_to >= CURRENT_DATE
-                ORDER BY severity, note_id""",
+        implementation_notes = q_opt(
+            mem,
+            "Implementation_Note",
             ImplementationNote,
+            f"WHERE is_active = 1 AND {valid} ORDER BY severity, note_id",
         )
-        change_log = q(
-            f"SELECT * FROM {mem}.Change_Log ORDER BY created_timestamp DESC",
-            ChangeLogEntry,
-        )
+        change_log = q_opt(mem, "Change_Log", ChangeLogEntry, "ORDER BY created_timestamp DESC")
 
         # --- Observability (rolling window) ---------------------------------
-
-        quality_metrics = q(
-            f"""SELECT * FROM {obs}.data_quality_metric
-                WHERE measured_dts >= CURRENT_TIMESTAMP - INTERVAL '{lookback_days}' DAY
-                ORDER BY measured_dts DESC""",
+        quality_metrics = q_opt(
+            obs,
+            "data_quality_metric",
             QualityMetric,
+            f"WHERE measured_dts >= {window} ORDER BY measured_dts DESC",
         )
-        lineage_runs = q(
-            f"""SELECT * FROM {obs}.lineage_run
-                WHERE run_dts >= CURRENT_TIMESTAMP - INTERVAL '{lookback_days}' DAY
-                ORDER BY run_dts DESC""",
-            LineageRun,
-        )
-        agent_outcomes = q(
-            f"""SELECT * FROM {obs}.agent_outcome
-                WHERE outcome_dts >= CURRENT_TIMESTAMP - INTERVAL '{lookback_days}' DAY
-                ORDER BY outcome_dts DESC""",
-            AgentOutcome,
-        )
-        change_events = q(
-            f"""SELECT * FROM {obs}.change_event
-                WHERE event_dts >= CURRENT_TIMESTAMP - INTERVAL '{lookback_days}' DAY
-                ORDER BY event_dts DESC""",
+        change_events = q_opt(
+            obs,
+            "change_event",
             ChangeEvent,
+            f"WHERE change_dts >= {window} ORDER BY change_dts DESC",
         )
-        data_lineage = q(
-            f"SELECT * FROM {obs}.data_lineage WHERE is_active = 1 ORDER BY lineage_id",
-            DataLineage,
-        )
-
-        # lineage_graph JOINs DBC.TablesV to resolve object kinds. This requires
-        # the view owner to hold SELECT WITH GRANT OPTION on DBC.TablesV — a DBA
-        # privilege that may not be present. Treated as optional: failure produces
-        # a warning rather than aborting the whole collection run.
-        lineage_graph = q_opt(
-            f"SELECT * FROM {sem}.lineage_graph ORDER BY lineage_id, edge_relationship",
-            LineageGraphEdge,
-            label=f"{sem}.lineage_graph",
+        data_lineage = q_opt(obs, "data_lineage", DataLineage, "ORDER BY lineage_id")
+        agent_outcomes = q_opt(
+            obs,
+            "agent_outcome",
+            AgentOutcome,
+            f"WHERE action_dts >= {window} ORDER BY action_dts DESC",
         )
 
     return DataProduct(
         product_name=product_name,
         generated_dts=datetime.now(timezone.utc),
+        registry=entry,
+        trust=trust_rows[0] if trust_rows else None,
         modules=modules,
         entities=entities,
         columns=columns,
         relationships=relationships,
-        naming_standards=naming_standards,
         recipes=recipes,
         glossary=glossary,
         decisions=decisions,
@@ -290,9 +204,7 @@ def collect(
         implementation_notes=implementation_notes,
         change_log=change_log,
         quality_metrics=quality_metrics,
-        lineage_runs=lineage_runs,
-        agent_outcomes=agent_outcomes,
         change_events=change_events,
         data_lineage=data_lineage,
-        lineage_graph=lineage_graph,
+        agent_outcomes=agent_outcomes,
     ), warnings

@@ -1,9 +1,9 @@
 """Cached metadata service backing the web server.
 
-``collect()`` runs ~18 queries against three live databases, so hitting it on
-every page click would be far too slow. This module wraps it with a small
-per-product TTL cache and a refresh override, and discovers deployed products
-by scanning ``DBC.DatabasesV`` for ``*_Semantic`` databases.
+``collect()`` runs many queries across several live databases, so hitting it on
+every page click would be too slow. This module wraps it with a small per-product
+TTL cache and a refresh override, and discovers products via the governance
+registry.
 """
 
 from __future__ import annotations
@@ -11,11 +11,9 @@ from __future__ import annotations
 import time
 from typing import Any, Callable
 
-from ..collector import collect
+from ..collector import collect, discover_products
+from ..config import resolve_registry_db
 from ..models import DataProduct
-
-# Suffix that identifies a data product's Semantic database.
-_SEMANTIC_SUFFIX = "_Semantic"
 
 ConnectionFactory = Callable[[], Any]
 
@@ -27,35 +25,38 @@ class DataProductService:
         connection_factory: Zero-arg callable returning a fresh, open
             teradatasql connection. A new connection is opened and closed per
             request so connections are never shared across threads.
+        registry_db: Governance registry database (configurable per system).
         ttl_seconds: How long a cached snapshot stays fresh before the next
             request triggers a re-collect.
     """
 
-    def __init__(self, connection_factory: ConnectionFactory, ttl_seconds: int = 300) -> None:
+    def __init__(
+        self,
+        connection_factory: ConnectionFactory,
+        registry_db: str | None = None,
+        ttl_seconds: int = 300,
+    ) -> None:
         self._connect = connection_factory
+        self._registry_db = resolve_registry_db(registry_db)
         self._ttl = ttl_seconds
         # product_name -> (expires_at, DataProduct, warnings)
         self._cache: dict[str, tuple[float, DataProduct, list[str]]] = {}
 
-    def list_products(self) -> list[str]:
-        """Return the names of all deployed data products, sorted.
-
-        A product is detected by the presence of a ``<name>_Semantic`` database.
-        """
+    def list_products(self) -> list[dict]:
+        """Return active products from the registry as lightweight dicts."""
         conn = self._connect()
         try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT DatabaseName FROM DBC.DatabasesV "
-                    "WHERE DatabaseName LIKE '%' || ? "
-                    "ORDER BY DatabaseName",
-                    [_SEMANTIC_SUFFIX],
-                )
-                names = [str(row[0]).strip() for row in cur.fetchall()]
+            entries = discover_products(conn, self._registry_db)
         finally:
             conn.close()
-
-        return [n[: -len(_SEMANTIC_SUFFIX)] for n in names if n.endswith(_SEMANTIC_SUFFIX)]
+        return [
+            {
+                "product_name": e.product_name,
+                "product_version": e.product_version,
+                "product_status": e.product_status,
+            }
+            for e in entries
+        ]
 
     def get(
         self,
@@ -63,13 +64,7 @@ class DataProductService:
         lookback_days: int = 90,
         refresh: bool = False,
     ) -> tuple[DataProduct, list[str]]:
-        """Return a (cached) DataProduct snapshot plus any collection warnings.
-
-        Args:
-            product_name: Data product name prefix, e.g. ``MortgagePlatform``.
-            lookback_days: Observability window passed through to ``collect()``.
-            refresh: When True, bypass the cache and re-collect.
-        """
+        """Return a (cached) DataProduct snapshot plus any collection warnings."""
         now = time.time()
         cached = self._cache.get(product_name)
         if not refresh and cached is not None and cached[0] > now:
@@ -77,7 +72,12 @@ class DataProductService:
 
         conn = self._connect()
         try:
-            dp, warnings = collect(product_name, conn, lookback_days=lookback_days)
+            dp, warnings = collect(
+                product_name,
+                conn,
+                registry_db=self._registry_db,
+                lookback_days=lookback_days,
+            )
         finally:
             conn.close()
 

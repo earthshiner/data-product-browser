@@ -8,7 +8,7 @@
 const state = {
   product: null,
   data: null, // the DataProduct object
-  activeEntity: null, // entity_metadata_key
+  activeEntity: null, // entity_metadata_id
   activeTab: "schema",
   view: "health", // "health" | "entity"
 };
@@ -43,7 +43,12 @@ async function loadProductList() {
     }
     select.innerHTML =
       '<option value="">Select a product…</option>' +
-      products.map((p) => `<option value="${p}">${p}</option>`).join("");
+      products
+        .map((p) => {
+          const v = p.product_version ? ` (v${p.product_version})` : "";
+          return `<option value="${p.product_name}">${p.product_name}${v}</option>`;
+        })
+        .join("");
   } catch (err) {
     select.innerHTML = '<option value="">Error loading products</option>';
     setStatus("⚠ " + err.message);
@@ -127,10 +132,10 @@ function renderTree() {
 
     for (const e of visible) {
       const item = document.createElement("div");
-      item.className = "entity" + (e.entity_metadata_key === state.activeEntity ? " active" : "");
+      item.className = "entity" + (e.entity_metadata_id === state.activeEntity ? " active" : "");
       const cols = columnsFor(e).length;
       item.innerHTML = `<span>${e.entity_name}</span><span class="count">${cols}</span>`;
-      item.onclick = () => selectEntity(e.entity_metadata_key);
+      item.onclick = () => selectEntity(e.entity_metadata_id);
       tree.appendChild(item);
     }
   }
@@ -146,7 +151,7 @@ function selectEntity(key) {
   state.activeEntity = key;
   state.view = "entity";
   renderTree();
-  const entity = state.data.entities.find((e) => e.entity_metadata_key === key);
+  const entity = state.data.entities.find((e) => e.entity_metadata_id === key);
   if (!entity) return;
   renderEntity(entity);
   el("detail").scrollTop = 0;
@@ -168,7 +173,7 @@ function findEntityByTable(db, table) {
 // Jump to the entity backing a given database.table, if one exists.
 function jump(db, table) {
   const target = findEntityByTable(db, table);
-  if (target) selectEntity(target.entity_metadata_key);
+  if (target) selectEntity(target.entity_metadata_id);
 }
 window.__jump = jump; // referenced by inline onclick handlers
 
@@ -184,10 +189,10 @@ function tableLink(db, table) {
 function relationshipsFor(entity) {
   const out = [];
   for (const r of state.data.relationships) {
-    if (sameTable(r.from_database, r.from_table, entity)) {
-      out.push({ dir: "→", thisCol: r.from_column, db: r.to_database, table: r.to_table, col: r.to_column, r });
-    } else if (sameTable(r.to_database, r.to_table, entity)) {
-      out.push({ dir: "←", thisCol: r.to_column, db: r.from_database, table: r.from_table, col: r.from_column, r });
+    if (sameTable(r.source_database, r.source_table, entity)) {
+      out.push({ dir: "→", thisCol: r.source_column, db: r.target_database, table: r.target_table, col: r.target_column, r });
+    } else if (sameTable(r.target_database, r.target_table, entity)) {
+      out.push({ dir: "←", thisCol: r.target_column, db: r.source_database, table: r.source_table, col: r.source_column, r });
     }
   }
   return out;
@@ -222,9 +227,10 @@ function renderEntity(entity) {
     <dl class="meta-grid">
       <dt>Object</dt><dd><code>${esc(entity.database_name)}.${esc(entity.table_name)}</code></dd>
       <dt>Module</dt><dd>${esc(entity.module_name)}</dd>
-      <dt>Category</dt><dd>${esc(entity.entity_category) || "—"}</dd>
+      <dt>View</dt><dd>${entity.view_name ? `<code>${esc(entity.view_name)}</code>` : "—"}</dd>
       <dt>Natural key</dt><dd><code>${esc(entity.natural_key_column) || "—"}</code></dd>
-      <dt>Approx. rows</dt><dd>${entity.record_count_approx ?? "—"}</dd>
+      <dt>Temporal pattern</dt><dd>${esc(entity.temporal_pattern) || "—"}</dd>
+      <dt>Industry standard</dt><dd>${esc(entity.industry_standard) || "—"}</dd>
     </dl>
     <div class="tabs">
       ${tab("schema", "Schema")}${tab("relationships", "Relationships")}
@@ -257,17 +263,18 @@ function schemaHTML(entity) {
     .map((c) => {
       const tags =
         (c.is_pii ? '<span class="tag pii">PII</span>' : "") +
+        (c.is_sensitive ? '<span class="tag pii">SENSITIVE</span>' : "") +
         (c.is_required ? '<span class="tag req">REQUIRED</span>' : "");
       return `<tr>
         <td class="col-name">${esc(c.column_name)}${tags}</td>
         <td><code>${esc(c.data_type) || "—"}</code></td>
         <td class="desc">${esc(c.business_description) || ""}</td>
-        <td class="desc">${esc(c.sample_values) || ""}</td>
+        <td class="desc">${esc(c.data_classification) || ""}</td>
       </tr>`;
     })
     .join("");
   return `<table>
-      <thead><tr><th>Column</th><th>Type</th><th>Description</th><th>Samples</th></tr></thead>
+      <thead><tr><th>Column</th><th>Type</th><th>Description</th><th>Classification</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="4" class="desc">No column metadata.</td></tr>'}</tbody>
     </table>`;
 }
@@ -280,12 +287,11 @@ function relationshipsHTML(entity) {
       (x) => `<div class="card">
         <h4><code>${esc(x.thisCol)}</code> ${x.dir} ${tableLink(x.db, x.table)}.<code>${esc(x.col)}</code></h4>
         <div>
-          <span class="pill">${esc(x.r.relationship_type)}</span>
+          ${x.r.relationship_type ? `<span class="pill">${esc(x.r.relationship_type)}</span>` : ""}
           ${x.r.cardinality ? `<span class="pill">${esc(x.r.cardinality)}</span>` : ""}
-          <span class="pill">${esc(x.r.join_type)} JOIN</span>
           ${x.r.is_mandatory ? '<span class="pill">mandatory</span>' : ""}
         </div>
-        ${x.r.relationship_desc ? `<p class="desc">${esc(x.r.relationship_desc)}</p>` : ""}
+        ${x.r.relationship_meaning ? `<p class="desc">${esc(x.r.relationship_meaning)}</p>` : ""}
       </div>`,
     )
     .join("");
@@ -348,33 +354,67 @@ function ago(s, now) {
   return Math.round(h / 24) + "d ago";
 }
 
+const isFailed = (status) => /fail|error/i.test(status || "");
+
 function showHealth() {
   const d = state.data;
   const now = new Date(d.generated_dts).getTime();
 
-  const qBelow = d.quality_metrics.filter((m) => m.is_below_threshold).length;
-  const failedRuns = d.lineage_runs.filter((r) => /fail|error/i.test(r.run_status || "")).length;
-  const failedChanges = d.change_events.filter((c) => !c.is_successful).length;
-  const lastRun = d.lineage_runs[0]; // collector orders by run_dts DESC
+  // is_threshold_met === 0 means the metric failed its threshold.
+  const qBad = d.quality_metrics.filter((m) => m.is_threshold_met === 0).length;
+  const failedRuns = d.data_lineage.filter((r) => isFailed(r.run_status)).length;
+  const runs = d.data_lineage.filter((r) => r.run_dts).sort((a, b) => (a.run_dts < b.run_dts ? 1 : -1));
+  const lastRun = runs[0];
 
   const stat = (cls, big, lbl) =>
     `<div class="stat ${cls}"><div class="big">${big}</div><div class="lbl">${lbl}</div></div>`;
 
+  const t = d.trust;
+  const trustCard = t
+    ? stat(
+        t.agent_use_allowed ? "ok" : "bad",
+        t.data_product_trust_score != null ? `${t.data_product_trust_score}` : esc(t.trust_status) || "—",
+        `Trust score${t.trust_status ? " · " + esc(t.trust_status) : ""}`,
+      )
+    : "";
+
   const cards = `<div class="summary-cards">
-    ${stat(qBelow ? "bad" : "ok", `${qBelow}/${d.quality_metrics.length}`, "Quality metrics below threshold")}
+    ${trustCard}
+    ${stat(qBad ? "bad" : "ok", `${qBad}/${d.quality_metrics.length}`, "Quality metrics failing threshold")}
     ${stat(failedRuns ? "bad" : "ok", failedRuns, "Failed lineage runs")}
-    ${stat(failedChanges ? "warn" : "ok", failedChanges, "Failed change events")}
     ${stat("", lastRun ? ago(lastRun.run_dts, now) : "—", "Last lineage run")}
+    ${stat("", d.change_events.length, "Change events in window")}
   </div>`;
 
   el("detail").innerHTML = `
     <h2>${esc(d.product_name)} — Product Health</h2>
-    <p class="sub">Snapshot ${fmtDate(d.generated_dts)} UTC · observability window from collection</p>
+    <p class="sub">Snapshot ${fmtDate(d.generated_dts)} UTC · ${esc((d.registry && d.registry.product_version) || "")}</p>
     ${cards}
+    ${trustDetail(t)}
     ${qualityTable(d)}
     ${lineageTable(d, now)}
     ${changeTable(d)}`;
   renderWarnings();
+}
+
+function trustDetail(t) {
+  if (!t) return "";
+  const checks =
+    t.total_checks != null ? `${t.passed_count ?? "—"}/${t.total_checks} checks passed` : "";
+  const scores = [
+    ["Trust", t.data_product_trust_score],
+    ["Performance readiness", t.performance_readiness_score],
+    ["Operational readiness", t.operational_readiness_score],
+  ]
+    .filter((s) => s[1] != null)
+    .map((s) => `<span class="pill">${s[0]}: ${s[1]}</span>`)
+    .join(" ");
+  return `<div class="card">
+    <h4>Trust engine <span class="pill">${esc(t.trust_status) || "—"}</span>
+      ${t.agent_use_allowed ? '<span class="pill">agent use allowed</span>' : '<span class="pill">agent use blocked</span>'}</h4>
+    <p class="desc">${checks}${t.failed_count ? ` · ${t.failed_count} failed` : ""}${t.critical_failure_count ? ` · ${t.critical_failure_count} critical` : ""}</p>
+    <div>${scores}</div>
+  </div>`;
 }
 
 function truncNote(total) {
@@ -383,15 +423,21 @@ function truncNote(total) {
 
 function qualityTable(d) {
   if (!d.quality_metrics.length) return "";
+  const statusCell = (m) => {
+    if (m.is_threshold_met == null) return '<td class="desc">—</td>';
+    return m.is_threshold_met
+      ? '<td class="status-ok">OK</td>'
+      : '<td class="status-bad">FAILED</td>';
+  };
   const rows = d.quality_metrics
     .slice(0, MAX_ROWS)
     .map(
       (m) => `<tr>
         <td><code>${esc(m.database_name)}.${esc(m.table_name)}</code></td>
-        <td>${esc(m.metric_name)}</td>
+        <td>${esc(m.metric_name)}${m.column_name ? ` <span class="desc">(${esc(m.column_name)})</span>` : ""}</td>
         <td class="num">${fmtNum(m.metric_value)}</td>
-        <td class="num">${fmtNum(m.threshold_value)}</td>
-        <td class="${m.is_below_threshold ? "status-bad" : "status-ok"}">${m.is_below_threshold ? "BELOW" : "OK"}</td>
+        <td class="num">${fmtNum(m.quality_threshold)}</td>
+        ${statusCell(m)}
         <td>${fmtDate(m.measured_dts)}</td>
       </tr>`,
     )
@@ -402,24 +448,24 @@ function qualityTable(d) {
 }
 
 function lineageTable(d, now) {
-  if (!d.lineage_runs.length) return "";
-  const rows = d.lineage_runs
+  if (!d.data_lineage.length) return "";
+  const rows = d.data_lineage
     .slice(0, MAX_ROWS)
     .map((r) => {
-      const failed = /fail|error/i.test(r.run_status || "");
+      const status = r.run_status || "—";
+      const cls = r.run_status ? (isFailed(status) ? "status-bad" : "status-ok") : "desc";
       return `<tr>
         <td>${esc(r.job_name) || "—"}</td>
-        <td class="${failed ? "status-bad" : "status-ok"}">${esc(r.run_status)}</td>
-        <td>${ago(r.run_dts, now)}</td>
-        <td class="num">${fmtNum(r.run_duration_ms)}</td>
+        <td><code>${esc(r.target_database) || ""}.${esc(r.target_table)}</code></td>
+        <td class="${cls}">${esc(status)}</td>
+        <td>${r.run_dts ? ago(r.run_dts, now) : "—"}</td>
         <td class="num">${fmtNum(r.records_read)}</td>
         <td class="num">${fmtNum(r.records_written)}</td>
-        <td class="num">${fmtNum(r.records_rejected)}</td>
       </tr>`;
     })
     .join("");
-  return `<h3 class="section-title">Lineage runs</h3>${truncNote(d.lineage_runs.length)}
-    <table><thead><tr><th>Job</th><th>Status</th><th>When</th><th>Duration ms</th><th>Read</th><th>Written</th><th>Rejected</th></tr></thead>
+  return `<h3 class="section-title">Lineage runs</h3>${truncNote(d.data_lineage.length)}
+    <table><thead><tr><th>Job</th><th>Target</th><th>Status</th><th>When</th><th>Read</th><th>Written</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
 }
 
@@ -429,17 +475,17 @@ function changeTable(d) {
     .slice(0, MAX_ROWS)
     .map(
       (c) => `<tr>
-        <td>${fmtDate(c.event_dts)}</td>
+        <td>${fmtDate(c.change_dts)}</td>
         <td><code>${esc(c.database_name)}.${esc(c.table_name)}</code></td>
-        <td>${esc(c.operation_type)}</td>
+        <td>${esc(c.change_type)}</td>
         <td class="num">${fmtNum(c.records_affected)}</td>
         <td>${esc(c.changed_by) || "—"}</td>
-        <td class="${c.is_successful ? "status-ok" : "status-bad"}">${c.is_successful ? "OK" : "FAILED"}</td>
+        <td>${esc(c.change_source) || "—"}</td>
       </tr>`,
     )
     .join("");
   return `<h3 class="section-title">Change activity</h3>${truncNote(d.change_events.length)}
-    <table><thead><tr><th>When</th><th>Object</th><th>Operation</th><th>Rows</th><th>By</th><th>Status</th></tr></thead>
+    <table><thead><tr><th>When</th><th>Object</th><th>Type</th><th>Rows</th><th>By</th><th>Source</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
 }
 
