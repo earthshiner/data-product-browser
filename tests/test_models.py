@@ -197,6 +197,36 @@ class TestSvgDiagram:
         assert "&lt;script&gt;" in svg
 
 
+class TestRenderers:
+    def test_cookbook_renders(self):
+        from data_product_browser.renderers.cookbook import render_cookbook
+
+        html = render_cookbook(_minimal_product())
+        assert "CallCentre Data Product" in html
+        assert "QC-001" in html
+        assert "Handle Time" in html  # glossary term
+        assert "Agent_Current" in html  # relationship target
+
+    def test_ops_dashboard_renders(self):
+        from data_product_browser.renderers.ops_dashboard import render_ops_dashboard
+
+        html = render_ops_dashboard(_minimal_product())
+        assert "window.__DATA__" in html
+        assert '"product_name": "CallCentre Data Product"' in html
+
+    def test_ops_data_is_valid_json(self):
+        import json
+        import re
+
+        from data_product_browser.renderers.ops_dashboard import render_ops_dashboard
+
+        html = render_ops_dashboard(_minimal_product())
+        match = re.search(r"window\.__DATA__\s*=\s*(\{.*?\});", html, re.DOTALL)
+        assert match, "Could not find __DATA__ assignment"
+        parsed = json.loads(match.group(1))
+        assert parsed["product_name"] == "CallCentre Data Product"
+
+
 class TestExceptions:
     def test_login_error_message(self):
         from data_product_browser.exceptions import LoginError

@@ -57,7 +57,10 @@ def _node_colour(
                     return _COL_ASSOC
     if relationships:
         for r in relationships:
-            if r.to_table.upper() == short.upper() and r.relationship_type.upper() == "LOOKUP":
+            if (
+                r.target_table.upper() == short.upper()
+                and (r.relationship_type or "").upper() == "LOOKUP"
+            ):
                 return _COL_REFERENCE
     return _COL_UNKNOWN
 
@@ -102,8 +105,8 @@ def make_join_diagram(
     if relationships:
         for r in relationships:
             if r.is_active:
-                rel_index[(r.from_table.upper(), r.to_table.upper())] = r
-                rel_index[(r.to_table.upper(), r.from_table.upper())] = r
+                rel_index[(r.source_table.upper(), r.target_table.upper())] = r
+                rel_index[(r.target_table.upper(), r.source_table.upper())] = r
 
     cy = _ROW_Y + _NODE_H // 2
 
@@ -128,8 +131,9 @@ def make_join_diagram(
         t_to = tables[i + 1]
 
         rel = rel_index.get((t_from.upper(), t_to.upper()))
+        # join_type was removed from the standard; optional relationships dash.
         dashed = (dashed_after is not None and i >= dashed_after) or (
-            rel is not None and rel.join_type.upper() != "INNER"
+            rel is not None and not rel.is_mandatory
         )
         stroke = _EDGE_DASHED if dashed else _EDGE_SOLID
         dash_attr = ' stroke-dasharray="5,3"' if dashed else ""
@@ -143,10 +147,10 @@ def make_join_diagram(
         # Edge label: join columns on a background pill
         if rel:
             label_lines = []
-            join_t = rel.join_type.upper()
+            rel_t = (rel.relationship_type or "REL").upper()
             card = rel.cardinality or ""
-            label_lines.append(f"{join_t}{f' ({card})' if card else ''}")
-            label_lines.append(f"{rel.from_column} → {rel.to_column}")
+            label_lines.append(f"{rel_t}{f' ({card})' if card else ''}")
+            label_lines.append(f"{rel.source_column} → {rel.target_column}")
 
             pill_w = max(len(l) for l in label_lines) * 6 + 16
             pill_h = 28
