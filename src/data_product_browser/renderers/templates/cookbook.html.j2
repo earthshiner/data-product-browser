@@ -334,7 +334,7 @@ body { margin: 0; font-family: 'Inter', -apple-system, sans-serif; background: v
               <th>Type</th>
               <th>Flags</th>
               <th>Description</th>
-              <th>Samples</th>
+              <th>Classification</th>
             </tr>
           </thead>
           <tbody>
@@ -349,7 +349,7 @@ body { margin: 0; font-family: 'Inter', -apple-system, sans-serif; background: v
                 {% if not col.is_required %}<span class="flag" style="background:#e5e7eb;color:#6b7280;">NULLABLE</span>{% endif %}
               </td>
               <td class="dd-desc">{{ col.business_description or '—' }}</td>
-              <td style="color:var(--text-sec);font-style:italic;font-size:11px;">{{ col.sample_values or '' }}</td>
+              <td style="color:var(--text-sec);font-style:italic;font-size:11px;">{{ col.data_classification or '' }}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -424,7 +424,7 @@ body { margin: 0; font-family: 'Inter', -apple-system, sans-serif; background: v
       <p class="arch-subtitle">From <code>{{ product_name }}_Semantic.entity_metadata</code></p>
       <table class="arch-table">
         <thead>
-          <tr><th>Module</th><th>Entity</th><th>Table</th><th>Natural Key</th><th>Category</th><th>Approx Rows</th><th>Description</th></tr>
+          <tr><th>Module</th><th>Entity</th><th>Table</th><th>Natural Key</th><th>Temporal</th><th>Industry Std</th><th>Description</th></tr>
         </thead>
         <tbody>
           {% for e in entities %}
@@ -433,8 +433,8 @@ body { margin: 0; font-family: 'Inter', -apple-system, sans-serif; background: v
             <td style="font-weight:600;">{{ e.entity_name }}</td>
             <td><code>{{ e.database_name }}.{{ e.table_name }}</code></td>
             <td><code>{{ e.natural_key_column or '—' }}</code></td>
-            <td style="font-size:11px;color:var(--text-sec);">{{ e.entity_category or '—' }}</td>
-            <td style="text-align:right;font-size:11px;">{{ "{:,}".format(e.record_count_approx) if e.record_count_approx else '—' }}</td>
+            <td style="font-size:11px;color:var(--text-sec);">{{ e.temporal_pattern or '—' }}</td>
+            <td style="font-size:11px;color:var(--text-sec);">{{ e.industry_standard or '—' }}</td>
             <td style="font-size:12px;max-width:320px;">{{ e.entity_description or '' }}</td>
           </tr>
           {% else %}
@@ -449,17 +449,17 @@ body { margin: 0; font-family: 'Inter', -apple-system, sans-serif; background: v
       <p class="arch-subtitle">From <code>{{ product_name }}_Semantic.table_relationship</code></p>
       <table class="arch-table">
         <thead>
-          <tr><th>From</th><th>Join</th><th>To</th><th>Type</th><th>Cardinality</th><th>Description</th></tr>
+          <tr><th>From</th><th>Mandatory</th><th>To</th><th>Type</th><th>Cardinality</th><th>Meaning</th></tr>
         </thead>
         <tbody>
           {% for r in relationships %}
           <tr>
-            <td><code>{{ r.from_table }}.{{ r.from_column }}</code></td>
-            <td style="font-size:11px;font-weight:600;color:{% if r.join_type == 'INNER' %}#1d4ed8{% else %}#c2410c{% endif %};">{{ r.join_type }}</td>
-            <td><code>{{ r.to_table }}.{{ r.to_column }}</code></td>
+            <td><code>{{ r.source_table }}.{{ r.source_column }}</code></td>
+            <td style="font-size:11px;font-weight:600;color:{% if r.is_mandatory %}#1d4ed8{% else %}#c2410c{% endif %};">{{ 'Yes' if r.is_mandatory else 'No' }}</td>
+            <td><code>{{ r.target_table }}.{{ r.target_column }}</code></td>
             <td style="font-size:11px;color:var(--text-sec);">{{ r.relationship_type }}</td>
             <td style="font-size:11px;color:var(--text-sec);">{{ r.cardinality or '—' }}</td>
-            <td style="font-size:12px;max-width:320px;">{{ r.relationship_desc or '' }}</td>
+            <td style="font-size:12px;max-width:320px;">{{ r.relationship_meaning or '' }}</td>
           </tr>
           {% else %}
           <tr><td colspan="6" style="color:var(--text-sec);font-size:12px;">No relationships found.</td></tr>

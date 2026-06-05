@@ -50,8 +50,8 @@ def _build_context(dp: DataProduct) -> dict:
         recipe_rels = [
             rel
             for rel in dp.relationships
-            if rel.from_table.upper() in recipe_tables_upper
-            and rel.to_table.upper() in recipe_tables_upper
+            if rel.source_table.upper() in recipe_tables_upper
+            and rel.target_table.upper() in recipe_tables_upper
         ]
         enriched_recipes.append(
             {
@@ -103,7 +103,6 @@ def _build_context(dp: DataProduct) -> dict:
         "modules": dp.modules,
         "relationships": dp.relationships,
         "module_registry": dp.module_registry,
-        "naming_standards": dp.naming_standards,
         "implementation_notes": dp.implementation_notes,
         "change_log": dp.change_log,
     }

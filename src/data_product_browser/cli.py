@@ -134,7 +134,9 @@ def store_password():
 
 @app.command()
 def generate(
-    product: str = typer.Argument(..., help="Data product name prefix, e.g. MortgagePlatform"),
+    product: str = typer.Argument(
+        ..., help="Registry product name, e.g. 'CallCentre Data Product'"
+    ),
     output: Path = typer.Option(Path("."), "--output", "-o", help="Output directory"),
     artefact: str = typer.Option(
         "all", "--artefact", "-a", help="Which artefact(s): all | cookbook | ops"
@@ -189,7 +191,7 @@ def generate(
 
 @app.command()
 def dump(
-    product: str = typer.Argument(..., help="Data product name prefix"),
+    product: str = typer.Argument(..., help="Registry product name"),
     output: Path = typer.Option(
         Path("data.json"), "--output", "-o", help="Path to write JSON snapshot"
     ),

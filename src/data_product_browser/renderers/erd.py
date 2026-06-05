@@ -68,8 +68,8 @@ def _build_tables(
     join_cols: dict[str, set[str]] = {}
     for r in relationships:
         if r.is_active:
-            join_cols.setdefault(r.from_table.upper(), set()).add(r.from_column.upper())
-            join_cols.setdefault(r.to_table.upper(), set()).add(r.to_column.upper())
+            join_cols.setdefault(r.source_table.upper(), set()).add(r.source_column.upper())
+            join_cols.setdefault(r.target_table.upper(), set()).add(r.target_column.upper())
 
     natural_keys: dict[str, set[str]] = {}
     for e in entities:
@@ -209,8 +209,8 @@ def _render_connectors(
     for r in relationships:
         if not r.is_active:
             continue
-        ai = table_index.get(r.from_table.upper())
-        bi = table_index.get(r.to_table.upper())
+        ai = table_index.get(r.source_table.upper())
+        bi = table_index.get(r.target_table.upper())
         if ai is None or bi is None or ai == bi:
             continue
 
@@ -223,10 +223,10 @@ def _render_connectors(
         # Always draw left-to-right regardless of relationship direction
         if ai <= bi:
             li, ri = ai, bi
-            from_col, to_col = r.from_column, r.to_column
+            from_col, to_col = r.source_column, r.target_column
         else:
             li, ri = bi, ai
-            from_col, to_col = r.to_column, r.from_column
+            from_col, to_col = r.target_column, r.source_column
 
         lt = tables[li]
         rt = tables[ri]
@@ -238,7 +238,8 @@ def _render_connectors(
 
         x1 = xs[li] + _BOX_W
         x2 = xs[ri]
-        dashed = ' stroke-dasharray="6,4"' if r.join_type.upper() != "INNER" else ""
+        # Optional relationships render dashed (join_type was removed from the standard).
+        dashed = "" if r.is_mandatory else ' stroke-dasharray="6,4"'
         parts.append(
             f'<line x1="{x1}" y1="{ly}" x2="{x2}" y2="{ry_val}" '
             f'stroke="#FF5F02" stroke-width="1.5" marker-end="url(#erd-arrow)"{dashed}/>'

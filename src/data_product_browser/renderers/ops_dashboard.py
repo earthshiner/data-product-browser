@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -23,26 +22,32 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 def _build_data(dp: DataProduct) -> dict:
     """Build the window.__DATA__ JSON payload consumed by the dashboard JS."""
 
-    # --- Trust score: percentage of quality metrics above threshold ----------
-    passing = sum(1 for m in dp.quality_metrics if not m.is_below_threshold)
+    # --- Trust score: prefer the trust engine, else quality pass-rate --------
+    # is_threshold_met == 1 passes; 0 fails; None is unscored.
+    passing = sum(1 for m in dp.quality_metrics if m.is_threshold_met)
     total_q = len(dp.quality_metrics) or 1
-    trust_pct = round((passing / total_q) * 100)
+    quality_pct = round((passing / total_q) * 100)
+    if dp.trust and dp.trust.data_product_trust_score is not None:
+        trust_pct = round(dp.trust.data_product_trust_score)
+    else:
+        trust_pct = quality_pct
 
-    # --- Lineage health: % of runs with SUCCESS status -----------------------
-    success_runs = sum(1 for r in dp.lineage_runs if r.run_status.upper() == "SUCCESS")
-    total_runs = len(dp.lineage_runs) or 1
+    # --- Lineage health: % of registered runs with SUCCESS status ------------
+    runs = [r for r in dp.data_lineage if r.run_status]
+    success_runs = sum(1 for r in runs if (r.run_status or "").upper() == "SUCCESS")
+    total_runs = len(runs) or 1
     lineage_health_pct = round((success_runs / total_runs) * 100)
 
     # --- Quality failures per table ------------------------------------------
     failures_by_table: dict[str, list] = defaultdict(list)
     for m in dp.quality_metrics:
-        if m.is_below_threshold:
+        if m.is_threshold_met == 0:
             failures_by_table[f"{m.database_name}.{m.table_name}"].append(
                 {
                     "metric": m.metric_name,
                     "value": float(m.metric_value) if m.metric_value is not None else None,
-                    "threshold": float(m.threshold_value)
-                    if m.threshold_value is not None
+                    "threshold": float(m.quality_threshold)
+                    if m.quality_threshold is not None
                     else None,
                     "measured_dts": m.measured_dts.isoformat(),
                 }
@@ -53,7 +58,7 @@ def _build_data(dp: DataProduct) -> dict:
         {
             "name": m.module_name,
             "database": m.database_name,
-            "status": m.deployment_status,
+            "status": "CURRENT" if m.is_current else "SUPERSEDED",
             "version": m.module_version,
             "purpose": m.module_purpose,
             "data_owner": m.data_owner,
@@ -66,54 +71,51 @@ def _build_data(dp: DataProduct) -> dict:
     # --- Recent lineage runs (last 20) ---------------------------------------
     recent_runs = [
         {
-            "run_id": r.lineage_run_id,
+            "run_id": r.lineage_id,
             "lineage_id": r.lineage_id,
             "job": r.job_name or f"lineage_{r.lineage_id}",
             "status": r.run_status,
-            "run_dts": r.run_dts.isoformat(),
-            "duration_ms": r.run_duration_ms,
+            "run_dts": r.run_dts.isoformat() if r.run_dts else None,
+            "duration_ms": None,  # not tracked in data_lineage
             "records_read": r.records_read,
             "records_written": r.records_written,
-            "records_rejected": r.records_rejected,
-            "error": r.error_message,
+            "records_rejected": None,  # not tracked in data_lineage
+            "error": None,
         }
-        for r in dp.lineage_runs[:20]
+        for r in dp.data_lineage[:20]
     ]
 
     # --- Agent outcomes summary ----------------------------------------------
     outcomes_by_type: dict[str, int] = defaultdict(int)
-    avg_confidence = 0.0
-    conf_count = 0
     for o in dp.agent_outcomes:
-        outcomes_by_type[o.outcome_type] += 1
-        if o.confidence_score is not None:
-            avg_confidence += float(o.confidence_score)
-            conf_count += 1
+        outcomes_by_type[o.outcome_status or "unknown"] += 1
 
     agent_summary = {
         "by_type": dict(outcomes_by_type),
-        "avg_confidence": round(avg_confidence / conf_count, 3) if conf_count else None,
+        "avg_confidence": None,  # confidence not tracked in agent_outcome
         "total": len(dp.agent_outcomes),
     }
 
     # --- Recent change events (last 20) --------------------------------------
     recent_changes = [
         {
-            "event_dts": e.event_dts.isoformat(),
+            "event_dts": e.change_dts.isoformat() if e.change_dts else None,
             "database": e.database_name,
             "table": e.table_name,
-            "operation": e.operation_type,
+            "operation": e.change_type,
             "records_affected": e.records_affected,
             "changed_by": e.changed_by,
             "job": e.job_name,
-            "successful": bool(e.is_successful),
+            "successful": True,  # change_event has no success flag in the standard
         }
         for e in dp.change_events[:20]
     ]
 
     # --- Data Freshness (Panel 2) from lineage_runs --------------------------
     freshness_rows = []
-    for r in dp.lineage_runs:
+    for r in dp.data_lineage:
+        if not r.run_dts:
+            continue
         age_h = (
             dp.generated_dts
             - r.run_dts.replace(
@@ -133,9 +135,9 @@ def _build_data(dp: DataProduct) -> dict:
                 "run_status": r.run_status,
                 "freshness_status": status,
                 "freshness_hours": round(age_h, 1),
-                "duration_ms": r.run_duration_ms,
+                "duration_ms": None,  # not tracked in data_lineage
                 "records_written": r.records_written,
-                "error": r.error_message,
+                "error": None,
             }
         )
 
@@ -201,7 +203,7 @@ def _build_data(dp: DataProduct) -> dict:
         "trust_score": trust_pct,
         "lineage_health_pct": lineage_health_pct,
         "total_quality_checks": len(dp.quality_metrics),
-        "quality_failures": len([m for m in dp.quality_metrics if m.is_below_threshold]),
+        "quality_failures": len([m for m in dp.quality_metrics if m.is_threshold_met == 0]),
         "failures_by_table": dict(failures_by_table),
         "modules": modules_status,
         "recent_lineage_runs": recent_runs,
