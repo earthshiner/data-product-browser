@@ -70,7 +70,7 @@ def _connect():
     """Return an open teradatasql connection with friendly error handling."""
     import teradatasql
 
-    load_dotenv()
+    load_dotenv(override=True)
     host = os.environ.get("TD_HOST")
     user = os.environ.get("TD_USER")
 
@@ -114,7 +114,7 @@ def store_password():
     except ImportError:
         _abort("The 'keyring' package is not installed. Run: uv sync")
 
-    load_dotenv()
+    load_dotenv(override=True)
     host = typer.prompt("Teradata host", default=os.environ.get("TD_HOST", ""))
     user = typer.prompt("Teradata user", default=os.environ.get("TD_USER", ""))
     if not host:
@@ -285,7 +285,7 @@ def serve(
     from .server.app import create_app
     from .server.service import DataProductService
 
-    load_dotenv()
+    load_dotenv(override=True)
     td_host = os.environ.get("TD_HOST")
     td_user = os.environ.get("TD_USER")
     if not td_host:
@@ -296,6 +296,8 @@ def serve(
         _abort("TD_USER is not set.\n\n  Add it to your .env file:\n\n    TD_USER=your-username")
 
     password = _get_password(td_host, td_user)
+
+    typer.echo(f"Connecting as {td_user}@{td_host} (registry: {registry_db or 'default'})…")
 
     def connection_factory():
         return teradatasql.connect(host=td_host, user=td_user, password=password)
