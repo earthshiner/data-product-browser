@@ -29,6 +29,7 @@ from .models import (
     EntityMetadata,
     GlossaryTerm,
     ImplementationNote,
+    LineageRun,
     ModuleRegistryEntry,
     ProductMap,
     QualityMetric,
@@ -36,6 +37,7 @@ from .models import (
     RegistryEntry,
     TableRelationship,
     TrustReport,
+    ViewMetadata,
 )
 
 _REGISTRY_TABLE = "active_data_product_registry"
@@ -149,6 +151,16 @@ def collect(
         columns = q_opt(sem, "column_metadata", ColumnMetadata, "WHERE is_active = 1")
         relationships = q_opt(sem, "table_relationship", TableRelationship, "WHERE is_active = 1")
         trust_rows = q_opt(sem, "trust_engine_latest", TrustReport)
+        view_metadata = q_opt(
+            sem,
+            "view_metadata",
+            ViewMetadata,
+            "WHERE is_active = 1 ORDER BY base_table, is_primary DESC, view_name",
+        )
+        # data_lineage (definitional) was relocated to the Semantic catalog module.
+        data_lineage = q_opt(
+            sem, "data_lineage", DataLineage, "WHERE is_active = 1 ORDER BY lineage_id"
+        )
 
         # --- Memory ---------------------------------------------------------
         recipes = q_opt(
@@ -193,7 +205,9 @@ def collect(
             ChangeEvent,
             f"WHERE change_dts >= {window} ORDER BY change_dts DESC",
         )
-        data_lineage = q_opt(obs, "data_lineage", DataLineage, "ORDER BY lineage_id")
+        lineage_run = q_opt(
+            obs, "lineage_run", LineageRun, f"WHERE run_dts >= {window} ORDER BY run_dts DESC"
+        )
         agent_outcomes = q_opt(
             obs,
             "agent_outcome",
@@ -216,8 +230,10 @@ def collect(
         module_registry=module_registry,
         implementation_notes=implementation_notes,
         change_log=change_log,
+        view_metadata=view_metadata,
+        data_lineage=data_lineage,
         quality_metrics=quality_metrics,
         change_events=change_events,
-        data_lineage=data_lineage,
+        lineage_run=lineage_run,
         agent_outcomes=agent_outcomes,
     ), warnings

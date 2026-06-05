@@ -14,12 +14,14 @@ from data_product_browser.models import (
     DataProduct,
     EntityMetadata,
     GlossaryTerm,
+    LineageRun,
     ProductMap,
     QualityMetric,
     Recipe,
     RegistryEntry,
     TableRelationship,
     TrustReport,
+    ViewMetadata,
 )
 from data_product_browser.renderers.sql_highlight import highlight_sql
 from data_product_browser.renderers.svg import make_join_diagram
@@ -135,10 +137,37 @@ def _minimal_product() -> DataProduct:
                 target_table="Call_H",
                 target_database="CallCentre_DOM_STD_T",
                 job_name="load_call",
+                is_active=1,
+            )
+        ],
+        lineage_run=[
+            LineageRun(
+                lineage_run_id=1,
+                lineage_id=1,
+                run_dts=datetime.now(timezone.utc),
                 run_status="SUCCESS",
                 records_read=95944,
                 records_written=95944,
             )
+        ],
+        view_metadata=[
+            ViewMetadata(
+                view_metadata_id=1,
+                base_database="CallCentre_DOM_STD_T",
+                base_table="Call_H",
+                view_database="CallCentre_DOM_STD_V",
+                view_name="Call_H",
+                view_type="LOCKING",
+                is_primary=1,
+            ),
+            ViewMetadata(
+                view_metadata_id=2,
+                base_database="CallCentre_DOM_STD_T",
+                base_table="Call_H",
+                view_database="CallCentre_DOM_BUS_V",
+                view_name="Call_Current",
+                view_type="CURRENT",
+            ),
         ],
     )
 

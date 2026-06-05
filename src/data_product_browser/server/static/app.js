@@ -233,11 +233,21 @@ function decisionsFor(entity) {
   return state.data.decisions.filter((d) => (d.affects_table || "").toLowerCase() === t);
 }
 
+// Views exposing this entity's base table (1:M), primary first.
+function viewsFor(entity) {
+  const db = entity.database_name;
+  const t = (entity.table_name || "").toLowerCase();
+  return (state.data.view_metadata || [])
+    .filter((v) => v.base_database === db && (v.base_table || "").toLowerCase() === t)
+    .sort((a, b) => (b.is_primary || 0) - (a.is_primary || 0));
+}
+
 // --- detail pane -------------------------------------------------------------
 
 function renderEntity(entity) {
   const counts = {
     schema: columnsFor(entity).length,
+    views: viewsFor(entity).length,
     relationships: relationshipsFor(entity).length,
     glossary: glossaryFor(entity).length,
     decisions: decisionsFor(entity).length,
@@ -258,7 +268,7 @@ function renderEntity(entity) {
       <dt>Industry standard</dt><dd>${esc(entity.industry_standard) || "—"}</dd>
     </dl>
     <div class="tabs">
-      ${tab("schema", "Schema")}${tab("relationships", "Relationships")}
+      ${tab("schema", "Schema")}${tab("views", "Views")}${tab("relationships", "Relationships")}
       ${tab("glossary", "Glossary")}${tab("decisions", "Decisions")}
     </div>
     <div id="tab-body"></div>`;
@@ -278,9 +288,28 @@ function renderTabBody(entity) {
   const body = el("tab-body");
   const empty = (msg) => `<div class="empty">${msg}</div>`;
   if (state.activeTab === "schema") body.innerHTML = schemaHTML(entity);
+  else if (state.activeTab === "views") body.innerHTML = viewsHTML(entity) || empty("No views catalogued for this table.");
   else if (state.activeTab === "relationships") body.innerHTML = relationshipsHTML(entity) || empty("No relationships defined.");
   else if (state.activeTab === "glossary") body.innerHTML = glossaryHTML(entity) || empty("No glossary terms reference this entity.");
   else if (state.activeTab === "decisions") body.innerHTML = decisionsHTML(entity) || empty("No design decisions affect this entity.");
+}
+
+function viewsHTML(entity) {
+  const views = viewsFor(entity);
+  if (!views.length) return "";
+  const rows = views
+    .map(
+      (v) => `<tr>
+        <td class="col-name">${esc(v.view_name)}${v.is_primary ? '<span class="tag req">PRIMARY</span>' : ""}</td>
+        <td><code>${esc(v.view_database)}</code></td>
+        <td>${v.view_type ? `<span class="pill">${esc(v.view_type)}</span>` : ""}</td>
+        <td class="desc">${esc(v.view_purpose) || ""}</td>
+      </tr>`,
+    )
+    .join("");
+  return `<table>
+      <thead><tr><th>View</th><th>Database</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
 }
 
 function schemaHTML(entity) {
@@ -462,8 +491,11 @@ function showOps() {
   const qScored = d.quality_metrics.filter((m) => m.is_threshold_met != null);
   const qPass = qScored.filter((m) => m.is_threshold_met).length;
   const qRate = qScored.length ? Math.round((qPass / qScored.length) * 100) : null;
-  const failedRuns = d.data_lineage.filter((r) => isFailed(r.run_status)).length;
-  const runs = d.data_lineage.filter((r) => r.run_dts).sort((a, b) => (a.run_dts < b.run_dts ? 1 : -1));
+  // Run telemetry now comes from lineage_run (Observability); data_lineage is definitional.
+  const runs = (d.lineage_run || [])
+    .filter((r) => r.run_dts)
+    .sort((a, b) => (a.run_dts < b.run_dts ? 1 : -1));
+  const failedRuns = runs.filter((r) => isFailed(r.run_status)).length;
   const lastRun = runs[0];
 
   const outcomes = d.agent_outcomes || [];
@@ -569,24 +601,30 @@ function qualityTable(d) {
 }
 
 function lineageTable(d, now) {
-  if (!d.data_lineage.length) return "";
-  const rows = d.data_lineage
+  const runs = d.lineage_run || [];
+  if (!runs.length) return "";
+  // Resolve target object from the definitional data_lineage by lineage_id.
+  const flowById = new Map((d.data_lineage || []).map((f) => [f.lineage_id, f]));
+  const rows = runs
     .slice(0, MAX_ROWS)
     .map((r) => {
       const status = r.run_status || "—";
       const cls = r.run_status ? (isFailed(status) ? "status-bad" : "status-ok") : "desc";
+      const flow = flowById.get(r.lineage_id);
+      const target = flow ? `${esc(flow.target_database) || ""}.${esc(flow.target_table)}` : "—";
       return `<tr>
-        <td>${esc(r.job_name) || "—"}</td>
-        <td><code>${esc(r.target_database) || ""}.${esc(r.target_table)}</code></td>
+        <td>${esc(r.job_name) || (flow ? esc(flow.job_name) : "—")}</td>
+        <td><code>${target}</code></td>
         <td class="${cls}">${esc(status)}</td>
         <td>${r.run_dts ? ago(r.run_dts, now) : "—"}</td>
         <td class="num">${fmtNum(r.records_read)}</td>
         <td class="num">${fmtNum(r.records_written)}</td>
+        <td class="num">${fmtNum(r.records_rejected)}</td>
       </tr>`;
     })
     .join("");
-  return `<h3 class="section-title">Lineage runs</h3>${truncNote(d.data_lineage.length)}
-    <table><thead><tr><th>Job</th><th>Target</th><th>Status</th><th>When</th><th>Read</th><th>Written</th></tr></thead>
+  return `<h3 class="section-title">Lineage runs</h3>${truncNote(runs.length)}
+    <table><thead><tr><th>Job</th><th>Target</th><th>Status</th><th>When</th><th>Read</th><th>Written</th><th>Rejected</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
 }
 
