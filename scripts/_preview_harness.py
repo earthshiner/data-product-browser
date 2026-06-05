@@ -113,6 +113,22 @@ def _sample() -> DataProduct:
                 entity_description="Stored model predictions.",
                 natural_key_column="prediction_id",
             ),
+            EntityMetadata(
+                entity_metadata_id=6,
+                module_name="Domain",
+                entity_name="Call Summary",
+                database_name=DOM,
+                table_name="Call_Summary_Current",
+                entity_description="Per-call summary text.",
+            ),
+            EntityMetadata(
+                entity_metadata_id=7,
+                module_name="Domain",
+                entity_name="Call Topic",
+                database_name=DOM,
+                table_name="Call_Topic_Current",
+                entity_description="Call topic classification.",
+            ),
         ],
         columns=[
             ColumnMetadata(

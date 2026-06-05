@@ -78,6 +78,7 @@ def test_static_shell_served():
     client = _client()
     assert client.get("/").status_code == 200
     assert client.get("/app.js").status_code == 200
+    assert client.get("/favicon.svg").status_code == 200
 
 
 # --- service cache + discovery ----------------------------------------------
