@@ -131,6 +131,19 @@ function renderTree() {
   };
   tree.appendChild(erd);
 
+  const cookbook = document.createElement("div");
+  cookbook.className = "nav-special" + (state.view === "cookbook" ? " active" : "");
+  const recipeCount = (state.data.recipes || []).length;
+  cookbook.innerHTML = `<span>📖</span><span>Cookbook</span><span class="count">${recipeCount}</span>`;
+  cookbook.onclick = () => {
+    state.view = "cookbook";
+    state.activeEntity = null;
+    renderTree();
+    showCookbook();
+    el("detail").scrollTop = 0;
+  };
+  tree.appendChild(cookbook);
+
   for (const [moduleName, entities] of entitiesByModule()) {
     const visible = entities.filter(
       (e) => !filter || e.entity_name.toLowerCase().includes(filter),
@@ -733,6 +746,103 @@ function showErd() {
         ${edges}${heads}${rects}
       </svg>
     </div>`;
+  renderWarnings();
+}
+
+// --- cookbook ----------------------------------------------------------------
+
+// prettier-ignore
+const SQL_KEYWORDS = new Set([
+  "SELECT","FROM","WHERE","GROUP","BY","ORDER","HAVING","QUALIFY","JOIN","LEFT","RIGHT",
+  "INNER","OUTER","FULL","CROSS","ON","AND","OR","NOT","IN","AS","IS","NULL","LIKE",
+  "BETWEEN","EXISTS","UNION","ALL","DISTINCT","CASE","WHEN","THEN","ELSE","END","WITH",
+  "OVER","PARTITION","ROW_NUMBER","RANK","COUNT","SUM","AVG","MIN","MAX","CAST","COALESCE",
+  "CURRENT_DATE","CURRENT_TIMESTAMP","INTERVAL","DESC","ASC","SAMPLE","TOP","LIMIT","USING",
+]);
+
+let cookbookQuery = "";
+
+// Lightweight SQL syntax highlighter (escapes first, then wraps tokens).
+function highlightSql(sql) {
+  return esc(sql).replace(
+    /('(?:[^']|'')*')|(--[^\n]*)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)/g,
+    (m, str, com, num, word) => {
+      if (str) return `<span class="sql-string">${m}</span>`;
+      if (com) return `<span class="sql-comment">${m}</span>`;
+      if (num) return `<span class="sql-number">${m}</span>`;
+      if (word && SQL_KEYWORDS.has(word.toUpperCase())) return `<span class="sql-keyword">${m}</span>`;
+      return m;
+    },
+  );
+}
+
+window.__copySql = (i, btn) => {
+  const r = state.data.recipes[i];
+  if (!r) return;
+  navigator.clipboard.writeText(r.sql_template).then(() => {
+    const old = btn.textContent;
+    btn.textContent = "Copied!";
+    btn.disabled = true;
+    setTimeout(() => {
+      btn.textContent = old;
+      btn.disabled = false;
+    }, 1200);
+  });
+};
+
+function complexityClass(c) {
+  const v = (c || "").toUpperCase();
+  if (v === "SIMPLE") return "ok";
+  if (v === "COMPLEX" || v === "ADVANCED") return "bad";
+  return "";
+}
+
+// Build the HTML for one recipe card. `i` indexes state.data.recipes for copy.
+function recipeCard(r, i) {
+  return `<div class="recipe">
+    <h4>${esc(r.recipe_title)}
+      <span class="pill ${complexityClass(r.complexity)}">${esc(r.complexity) || "—"}</span>
+      ${r.target_module ? `<span class="pill">${esc(r.target_module)}</span>` : ""}</h4>
+    ${r.recipe_description ? `<p class="desc">${esc(r.recipe_description)}</p>` : ""}
+    ${r.use_case ? `<p class="desc"><strong>Use case:</strong> ${esc(r.use_case)}</p>` : ""}
+    <div class="code-head">
+      <span class="recipe-id">${esc(r.recipe_id)}</span>
+      <button class="copy-btn" onclick="window.__copySql(${i}, this)">Copy SQL</button>
+    </div>
+    <pre class="sql"><code>${highlightSql(r.sql_template || "")}</code></pre>
+    ${r.parameter_descriptions ? `<p class="desc"><strong>Parameters:</strong> ${esc(r.parameter_descriptions)}</p>` : ""}
+    ${r.performance_notes ? `<p class="desc">⚡ ${esc(r.performance_notes)}</p>` : ""}
+  </div>`;
+}
+
+function recipeListHtml() {
+  const q = cookbookQuery.trim().toLowerCase();
+  const match = (r) =>
+    !q ||
+    [r.recipe_title, r.recipe_description, r.use_case, r.target_module, r.sql_template].some((f) =>
+      (f || "").toLowerCase().includes(q),
+    );
+  const cards = (state.data.recipes || [])
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => match(r))
+    .map(({ r, i }) => recipeCard(r, i))
+    .join("");
+  return cards || '<div class="empty">No recipes match.</div>';
+}
+
+function showCookbook() {
+  const d = state.data;
+  el("detail").innerHTML = `
+    <h2>${esc(d.product_name)} — Cookbook</h2>
+    <p class="sub">${(d.recipes || []).length} recipes · ready-to-run query templates from the standard's Memory module</p>
+    <input id="cookbook-search" class="cookbook-search" type="search" placeholder="Search recipes…" value="${esc(cookbookQuery)}" />
+    <div id="recipe-list">${recipeListHtml()}</div>`;
+
+  const search = el("cookbook-search");
+  search.addEventListener("input", () => {
+    cookbookQuery = search.value;
+    el("recipe-list").innerHTML = recipeListHtml(); // keeps the search box focused
+  });
   renderWarnings();
 }
 

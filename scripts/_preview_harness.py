@@ -24,6 +24,7 @@ from data_product_browser.models import (
     GlossaryTerm,
     ProductMap,
     QualityMetric,
+    Recipe,
     RegistryEntry,
     TableRelationship,
     TrustReport,
@@ -201,6 +202,50 @@ def _sample() -> DataProduct:
                 relationship_type="FK",
                 cardinality="N:1",
                 relationship_meaning="Predictions reference feature rows.",
+            ),
+        ],
+        recipes=[
+            Recipe(
+                recipe_key=1,
+                recipe_id="QC-001",
+                recipe_title="Calls handled per agent",
+                recipe_description="Counts calls grouped by agent, busiest first.",
+                use_case="How many calls did each agent handle?",
+                target_module="Domain",
+                sql_template=(
+                    "-- Calls per agent (current view)\n"
+                    "SELECT a.agent_name, COUNT(*) AS call_count\n"
+                    "FROM CallCentre_DOM_STD_V.Call_Current AS c\n"
+                    "INNER JOIN CallCentre_DOM_STD_V.Agent_Current AS a\n"
+                    "  ON c.agent_id = a.agent_id\n"
+                    "GROUP BY a.agent_name\n"
+                    "QUALIFY RANK() OVER (ORDER BY call_count DESC) <= 10\n"
+                    "ORDER BY call_count DESC;"
+                ),
+                parameter_descriptions="None.",
+                performance_notes="Collect stats on Call_Current.agent_id for the join.",
+                complexity="SIMPLE",
+                source_module="Domain",
+                valid_from=NOW.date(),
+            ),
+            Recipe(
+                recipe_key=2,
+                recipe_id="QC-002",
+                recipe_title="Low-scoring calls in last 7 days",
+                recipe_description="Calls whose composite score fell below 0.5 recently.",
+                use_case="Which recent calls need quality review?",
+                target_module="Prediction",
+                sql_template=(
+                    "SELECT c.call_id, f.composite_score\n"
+                    "FROM CallCentre_PRE_STD_V.v_call_features_current AS f\n"
+                    "JOIN CallCentre_DOM_STD_V.Call_Current AS c ON c.call_id = f.call_id\n"
+                    "WHERE f.composite_score < 0.5\n"
+                    "  AND c.start_ts >= CURRENT_DATE - INTERVAL '7' DAY\n"
+                    "ORDER BY f.composite_score ASC;"
+                ),
+                complexity="COMPLEX",
+                source_module="Prediction",
+                valid_from=NOW.date(),
             ),
         ],
         glossary=[
