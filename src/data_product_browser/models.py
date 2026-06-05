@@ -31,7 +31,7 @@ class _Base(BaseModel):
 class RegistryEntry(_Base):
     """<registry_db>.active_data_product_registry — one row per data product."""
 
-    product_id: Optional[int] = None
+    product_id: Optional[str] = None
     product_name: str
     product_version: Optional[str] = None
     product_description: Optional[str] = None
