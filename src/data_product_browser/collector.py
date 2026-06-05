@@ -15,6 +15,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from pydantic import ValidationError
+
 from .config import resolve_registry_db
 from .models import (
     AgentOutcome,
@@ -116,6 +118,17 @@ def collect(
             try:
                 cur.execute(f"SELECT * FROM {ref}{(' ' + suffix) if suffix else ''}")
                 return _rows(cur, model_class)
+            except ValidationError as exc:
+                # Surface field-level detail so the mismatch is actionable:
+                # "<column>: <reason>" per error, pointing at the model to fix.
+                details = "; ".join(
+                    f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()[:8]
+                )
+                warnings.append(
+                    f"⚠  Skipped {ref}: {exc.error_count()} validation error(s) "
+                    f"in {model_class.__name__} — {details}"
+                )
+                return []
             except Exception as exc:
                 warnings.append(f"⚠  Skipped {ref}:\n\n  {str(exc).splitlines()[0]}")
                 return []
