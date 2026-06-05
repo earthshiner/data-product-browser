@@ -344,7 +344,10 @@ class ChangeEvent(_Base):
 
 
 class DataLineage(_Base):
-    """<observability>.data_lineage — registered ETL edges with run telemetry."""
+    """<semantic>.data_lineage — DEFINITIONAL lineage (one row per flow).
+
+    Relocated to the Semantic (catalog) module; executions live in LineageRun.
+    """
 
     lineage_id: int
     source_database: Optional[str] = None
@@ -355,14 +358,44 @@ class DataLineage(_Base):
     transformation_type: Optional[str] = None
     transformation_logic: Optional[str] = None
     job_name: Optional[str] = None
-    run_dts: Optional[datetime] = None
-    run_status: Optional[str] = None
-    records_read: Optional[int] = None
-    records_written: Optional[int] = None
-    openlineage_run_id: Optional[str] = None
     openlineage_job_name: Optional[str] = None
     openlineage_namespace: Optional[str] = None
+    is_active: int = 1
+    registered_dts: Optional[datetime] = None
+    retired_dts: Optional[datetime] = None
     created_at: Optional[datetime] = None
+
+
+class LineageRun(_Base):
+    """<observability>.lineage_run — OPERATIONAL execution log (FK -> data_lineage)."""
+
+    lineage_run_id: int
+    lineage_id: int
+    run_dts: datetime
+    run_status: str
+    run_duration_ms: Optional[int] = None
+    records_read: Optional[int] = None
+    records_written: Optional[int] = None
+    records_rejected: Optional[int] = None
+    batch_key: Optional[str] = None
+    job_name: Optional[str] = None
+    openlineage_run_id: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+class ViewMetadata(_Base):
+    """<semantic>.view_metadata — catalogues the views exposing each base table (1:M)."""
+
+    view_metadata_id: int
+    base_database: str
+    base_table: str
+    view_database: str
+    view_name: str
+    view_type: Optional[str] = None  # LOCKING | BUSINESS | CURRENT | ENRICHED | PIT | DERIVED
+    view_purpose: Optional[str] = None
+    is_primary: int = 0
+    is_active: int = 1
 
 
 class AgentOutcome(_Base):
@@ -399,6 +432,8 @@ class DataProduct(_Base):
     entities: list[EntityMetadata] = []
     columns: list[ColumnMetadata] = []
     relationships: list[TableRelationship] = []
+    view_metadata: list[ViewMetadata] = []
+    data_lineage: list[DataLineage] = []  # definitional lineage now lives in Semantic
 
     # Memory
     recipes: list[Recipe] = []
@@ -411,5 +446,5 @@ class DataProduct(_Base):
     # Observability
     quality_metrics: list[QualityMetric] = []
     change_events: list[ChangeEvent] = []
-    data_lineage: list[DataLineage] = []
+    lineage_run: list[LineageRun] = []
     agent_outcomes: list[AgentOutcome] = []

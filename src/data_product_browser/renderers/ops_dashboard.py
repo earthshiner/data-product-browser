@@ -33,7 +33,7 @@ def _build_data(dp: DataProduct) -> dict:
         trust_pct = quality_pct
 
     # --- Lineage health: % of registered runs with SUCCESS status ------------
-    runs = [r for r in dp.data_lineage if r.run_status]
+    runs = [r for r in dp.lineage_run if r.run_status]
     success_runs = sum(1 for r in runs if (r.run_status or "").upper() == "SUCCESS")
     total_runs = len(runs) or 1
     lineage_health_pct = round((success_runs / total_runs) * 100)
@@ -71,18 +71,18 @@ def _build_data(dp: DataProduct) -> dict:
     # --- Recent lineage runs (last 20) ---------------------------------------
     recent_runs = [
         {
-            "run_id": r.lineage_id,
+            "run_id": r.lineage_run_id,
             "lineage_id": r.lineage_id,
             "job": r.job_name or f"lineage_{r.lineage_id}",
             "status": r.run_status,
             "run_dts": r.run_dts.isoformat() if r.run_dts else None,
-            "duration_ms": None,  # not tracked in data_lineage
+            "duration_ms": r.run_duration_ms,
             "records_read": r.records_read,
             "records_written": r.records_written,
-            "records_rejected": None,  # not tracked in data_lineage
-            "error": None,
+            "records_rejected": r.records_rejected,
+            "error": r.error_message,
         }
-        for r in dp.data_lineage[:20]
+        for r in dp.lineage_run[:20]
     ]
 
     # --- Agent outcomes summary ----------------------------------------------
@@ -113,7 +113,7 @@ def _build_data(dp: DataProduct) -> dict:
 
     # --- Data Freshness (Panel 2) from lineage_runs --------------------------
     freshness_rows = []
-    for r in dp.data_lineage:
+    for r in dp.lineage_run:
         if not r.run_dts:
             continue
         age_h = (
@@ -135,9 +135,9 @@ def _build_data(dp: DataProduct) -> dict:
                 "run_status": r.run_status,
                 "freshness_status": status,
                 "freshness_hours": round(age_h, 1),
-                "duration_ms": None,  # not tracked in data_lineage
+                "duration_ms": r.run_duration_ms,
                 "records_written": r.records_written,
-                "error": None,
+                "error": r.error_message,
             }
         )
 

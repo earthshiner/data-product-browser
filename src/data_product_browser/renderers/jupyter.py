@@ -19,7 +19,6 @@ import re
 
 from ..models import Recipe
 
-
 _BIND_RE = re.compile(r":([A-Za-z_][A-Za-z0-9_]*)")
 
 

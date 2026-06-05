@@ -198,7 +198,7 @@ def dump(
     lookback: int = typer.Option(90, "--lookback", help="Observability lookback in days"),
 ):
     """Dump the raw DataProduct snapshot to JSON (useful for offline rendering/debugging)."""
-    typer.echo(f"\nConnecting to Teradata…")
+    typer.echo("\nConnecting to Teradata…")
     conn = _connect()
 
     try:
