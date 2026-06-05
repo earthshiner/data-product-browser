@@ -119,6 +119,18 @@ function renderTree() {
   };
   tree.appendChild(ops);
 
+  const erd = document.createElement("div");
+  erd.className = "nav-special" + (state.view === "erd" ? " active" : "");
+  erd.innerHTML = "<span>🗺</span><span>Entity map (ERD)</span>";
+  erd.onclick = () => {
+    state.view = "erd";
+    state.activeEntity = null;
+    renderTree();
+    showErd();
+    el("detail").scrollTop = 0;
+  };
+  tree.appendChild(erd);
+
   for (const [moduleName, entities] of entitiesByModule()) {
     const visible = entities.filter(
       (e) => !filter || e.entity_name.toLowerCase().includes(filter),
@@ -622,6 +634,106 @@ function agentTable(d, now) {
     <div class="pill-row">${pills}</div>${truncNote(outcomes.length)}
     <table><thead><tr><th>When</th><th>Action</th><th>Outcome</th><th>Exec ms</th><th>Records</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
+}
+
+// --- entity map (ERD) --------------------------------------------------------
+
+const ERD_COLOURS = ["#4aa8ff", "#3fb950", "#d29922", "#ff7b72", "#a371f7", "#39c5cf", "#e3b341"];
+const erdKey = (db, table) => `${db}|${(table || "").toLowerCase()}`;
+
+window.__erdSelect = (id) => selectEntity(id);
+
+function showErd() {
+  const d = state.data;
+  const groups = [...entitiesByModule()];
+  if (!groups.length) {
+    el("detail").innerHTML = `<h2>Entity map</h2><div class="empty">No entities to map.</div>`;
+    return;
+  }
+
+  const NODE_W = 180;
+  const NODE_H = 38;
+  const COL_GAP = 90;
+  const ROW_GAP = 26;
+  const PAD = 24;
+  const HEAD = 30;
+  const colW = NODE_W + COL_GAP;
+
+  // Lay entities out in one column per module; index nodes by db|table.
+  const nodes = [];
+  const byKey = new Map();
+  groups.forEach(([mod, ents], ci) => {
+    const colour = ERD_COLOURS[ci % ERD_COLOURS.length];
+    ents.forEach((e, ri) => {
+      const node = {
+        e,
+        mod,
+        colour,
+        x: PAD + ci * colW,
+        y: PAD + HEAD + ri * (NODE_H + ROW_GAP),
+      };
+      nodes.push(node);
+      byKey.set(erdKey(e.database_name, e.table_name), node);
+    });
+  });
+
+  const maxRows = Math.max(...groups.map(([, e]) => e.length));
+  const width = PAD * 2 + (groups.length - 1) * colW + NODE_W;
+  const height = PAD * 2 + HEAD + maxRows * (NODE_H + ROW_GAP);
+
+  // Edges from relationships where both endpoints are mapped entities.
+  let edges = "";
+  let drawn = 0;
+  for (const r of d.relationships) {
+    const s = byKey.get(erdKey(r.source_database, r.source_table));
+    const t = byKey.get(erdKey(r.target_database, r.target_table));
+    if (!s || !t || s === t) continue;
+    const sMidY = s.y + NODE_H / 2;
+    const tMidY = t.y + NODE_H / 2;
+    const rightward = t.x >= s.x;
+    const sx = rightward ? s.x + NODE_W : s.x;
+    const tx = rightward ? t.x : t.x + NODE_W;
+    const co = rightward ? 45 : -45;
+    edges += `<path class="erd-edge" d="M ${sx} ${sMidY} C ${sx + co} ${sMidY} ${tx - co} ${tMidY} ${tx} ${tMidY}" marker-end="url(#erd-arrow)"><title>${esc(r.relationship_meaning || r.relationship_type || "related")}</title></path>`;
+    drawn++;
+  }
+
+  const heads = groups
+    .map((g, ci) => {
+      const x = PAD + ci * colW;
+      return `<text class="erd-head" x="${x}" y="${PAD + 14}">${esc(g[0])}</text>`;
+    })
+    .join("");
+
+  const rects = nodes
+    .map((n) => {
+      const name = n.e.entity_name.length > 22 ? n.e.entity_name.slice(0, 21) + "…" : n.e.entity_name;
+      const cols = columnsFor(n.e).length;
+      return `<g class="erd-node" onclick="window.__erdSelect(${n.e.entity_metadata_id})">
+        <rect x="${n.x}" y="${n.y}" width="${NODE_W}" height="${NODE_H}" rx="7"
+              fill="var(--panel-2)" stroke="${n.colour}" stroke-width="1.5"/>
+        <rect x="${n.x}" y="${n.y}" width="4" height="${NODE_H}" rx="2" fill="${n.colour}"/>
+        <text class="erd-label" x="${n.x + 14}" y="${n.y + 17}">${esc(name)}</text>
+        <text class="erd-sub" x="${n.x + 14}" y="${n.y + 30}">${esc(n.e.table_name)} · ${cols} cols</text>
+        <title>${esc(n.e.database_name)}.${esc(n.e.table_name)}</title>
+      </g>`;
+    })
+    .join("");
+
+  el("detail").innerHTML = `
+    <h2>${esc(d.product_name)} — Entity map</h2>
+    <p class="sub">${nodes.length} entities · ${drawn} relationships · click a node to open it</p>
+    <div class="erd-scroll">
+      <svg class="erd" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+        <defs>
+          <marker id="erd-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)"/>
+          </marker>
+        </defs>
+        ${edges}${heads}${rects}
+      </svg>
+    </div>`;
+  renderWarnings();
 }
 
 el("product-select").addEventListener("change", (e) => loadProduct(e.target.value));
