@@ -656,97 +656,185 @@ const erdKey = (db, table) => `${db}|${(table || "").toLowerCase()}`;
 
 window.__erdSelect = (id) => selectEntity(id);
 
+const ERD_NODE_W = 180;
+const ERD_NODE_H = 38;
+const ERD_COL_GAP = 110;
+const ERD_ROW_GAP = 22;
+const ERD_PAD = 24;
+const ERD_HEAD = 34;
+const erdColW = ERD_NODE_W + ERD_COL_GAP;
+const erdRowH = ERD_NODE_H + ERD_ROW_GAP;
+
+function erdNodeSvg(n) {
+  const name =
+    n.e.entity_name.length > 22 ? n.e.entity_name.slice(0, 21) + "…" : n.e.entity_name;
+  const cols = columnsFor(n.e).length;
+  return `<g class="erd-node" onclick="window.__erdSelect(${n.e.entity_metadata_id})">
+    <rect x="${n.x}" y="${n.y}" width="${ERD_NODE_W}" height="${ERD_NODE_H}" rx="7"
+          fill="var(--panel-2)" stroke="${n.colour}" stroke-width="1.5"/>
+    <rect x="${n.x}" y="${n.y}" width="4" height="${ERD_NODE_H}" rx="2" fill="${n.colour}"/>
+    <text class="erd-label" x="${n.x + 14}" y="${n.y + 17}">${esc(name)}</text>
+    <text class="erd-sub" x="${n.x + 14}" y="${n.y + 30}">${esc(n.e.table_name)} · ${cols} cols</text>
+    <title>${esc(n.e.database_name)}.${esc(n.e.table_name)}</title>
+  </g>`;
+}
+
+// Longest-path layering: referenced tables sit left, dependents flow right.
+function erdLayers(byKey, out, inn) {
+  const layer = new Map();
+  const visiting = new Set();
+  const calc = (k) => {
+    if (layer.has(k)) return layer.get(k);
+    if (visiting.has(k)) return 0; // cycle guard
+    visiting.add(k);
+    let L = 0;
+    for (const t of out.get(k)) L = Math.max(L, calc(t) + 1);
+    visiting.delete(k);
+    layer.set(k, L);
+    return L;
+  };
+  const connected = [...byKey.keys()].filter((k) => out.get(k).size || inn.get(k).size);
+  connected.forEach(calc);
+  const maxLayer = connected.length ? Math.max(...connected.map((k) => layer.get(k))) : 0;
+  const layers = Array.from({ length: maxLayer + 1 }, () => []);
+  connected.forEach((k) => layers[layer.get(k)].push(k));
+  return { layers, layer };
+}
+
 function showErd() {
   const d = state.data;
-  const groups = [...entitiesByModule()];
-  if (!groups.length) {
+  if (!d.entities.length) {
     el("detail").innerHTML = `<h2>Entity map</h2><div class="empty">No entities to map.</div>`;
     return;
   }
 
-  const NODE_W = 180;
-  const NODE_H = 38;
-  const COL_GAP = 90;
-  const ROW_GAP = 26;
-  const PAD = 24;
-  const HEAD = 30;
-  const colW = NODE_W + COL_GAP;
-
-  // Lay entities out in one column per module; index nodes by db|table.
-  const nodes = [];
+  // Module → colour, and node objects keyed by db|table.
+  const moduleColour = new Map();
+  [...entitiesByModule()].forEach(([mod], i) =>
+    moduleColour.set(mod, ERD_COLOURS[i % ERD_COLOURS.length]),
+  );
   const byKey = new Map();
-  groups.forEach(([mod, ents], ci) => {
-    const colour = ERD_COLOURS[ci % ERD_COLOURS.length];
-    ents.forEach((e, ri) => {
-      const node = {
-        e,
-        mod,
-        colour,
-        x: PAD + ci * colW,
-        y: PAD + HEAD + ri * (NODE_H + ROW_GAP),
-      };
-      nodes.push(node);
-      byKey.set(erdKey(e.database_name, e.table_name), node);
+  for (const e of d.entities) {
+    byKey.set(erdKey(e.database_name, e.table_name), {
+      e,
+      mod: e.module_name || "Other",
+      colour: moduleColour.get(e.module_name) || ERD_COLOURS[0],
     });
-  });
-
-  const maxRows = Math.max(...groups.map(([, e]) => e.length));
-  const width = PAD * 2 + (groups.length - 1) * colW + NODE_W;
-  const height = PAD * 2 + HEAD + maxRows * (NODE_H + ROW_GAP);
-
-  // Edges from relationships where both endpoints are mapped entities.
-  let edges = "";
-  let drawn = 0;
-  for (const r of d.relationships) {
-    const s = byKey.get(erdKey(r.source_database, r.source_table));
-    const t = byKey.get(erdKey(r.target_database, r.target_table));
-    if (!s || !t || s === t) continue;
-    const sMidY = s.y + NODE_H / 2;
-    const tMidY = t.y + NODE_H / 2;
-    const rightward = t.x >= s.x;
-    const sx = rightward ? s.x + NODE_W : s.x;
-    const tx = rightward ? t.x : t.x + NODE_W;
-    const co = rightward ? 45 : -45;
-    edges += `<path class="erd-edge" d="M ${sx} ${sMidY} C ${sx + co} ${sMidY} ${tx - co} ${tMidY} ${tx} ${tMidY}" marker-end="url(#erd-arrow)"><title>${esc(r.relationship_meaning || r.relationship_type || "related")}</title></path>`;
-    drawn++;
   }
 
-  const heads = groups
-    .map((g, ci) => {
-      const x = PAD + ci * colW;
-      return `<text class="erd-head" x="${x}" y="${PAD + 14}">${esc(g[0])}</text>`;
+  // Adjacency over edges whose both endpoints are mapped entities.
+  const out = new Map();
+  const inn = new Map();
+  for (const k of byKey.keys()) {
+    out.set(k, new Set());
+    inn.set(k, new Set());
+  }
+  const rels = [];
+  for (const r of d.relationships) {
+    const sk = erdKey(r.source_database, r.source_table);
+    const tk = erdKey(r.target_database, r.target_table);
+    if (!byKey.has(sk) || !byKey.has(tk) || sk === tk) continue;
+    out.get(sk).add(tk);
+    inn.get(tk).add(sk);
+    rels.push({ sk, tk, r });
+  }
+
+  const { layers } = erdLayers(byKey, out, inn);
+  const isolated = [...byKey.keys()].filter((k) => !out.get(k).size && !inn.get(k).size);
+
+  // Order within each layer: start alphabetical, then one barycenter sweep
+  // (by mean rank of a node's targets) to reduce edge crossings.
+  const nameOf = (k) => byKey.get(k).e.entity_name;
+  layers.forEach((ls) =>
+    ls.sort((a, b) => (byKey.get(a).mod + nameOf(a)).localeCompare(byKey.get(b).mod + nameOf(b))),
+  );
+  const rank = new Map();
+  const setRanks = () => layers.forEach((ls) => ls.forEach((k, i) => rank.set(k, i)));
+  setRanks();
+  for (let L = 1; L < layers.length; L++) {
+    layers[L].sort((a, b) => barycenter(a, out, rank) - barycenter(b, out, rank));
+    setRanks();
+  }
+
+  // Positions: x by layer, y centred per column.
+  const maxCount = Math.max(1, ...layers.map((l) => l.length));
+  const topY = ERD_PAD + ERD_HEAD;
+  for (let L = 0; L < layers.length; L++) {
+    const ls = layers[L];
+    const startY = topY + ((maxCount - ls.length) * erdRowH) / 2;
+    ls.forEach((k, i) => {
+      const n = byKey.get(k);
+      n.x = ERD_PAD + L * erdColW;
+      n.y = startY + i * erdRowH;
+    });
+  }
+  const layeredW = ERD_PAD * 2 + Math.max(0, layers.length - 1) * erdColW + ERD_NODE_W;
+  let contentH = topY + maxCount * erdRowH;
+
+  // Isolated entities: wrapped grid below the layered graph.
+  let isoSvg = "";
+  if (isolated.length) {
+    const perRow = Math.max(1, Math.floor((layeredW - ERD_PAD * 2 + ERD_COL_GAP) / erdColW));
+    const isoTop = contentH + 18;
+    isoSvg += `<text class="erd-head" x="${ERD_PAD}" y="${isoTop}">Unconnected (${isolated.length})</text>`;
+    isolated.sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+    isolated.forEach((k, i) => {
+      const n = byKey.get(k);
+      n.x = ERD_PAD + (i % perRow) * erdColW;
+      n.y = isoTop + 10 + Math.floor(i / perRow) * erdRowH;
+    });
+    const rows = Math.ceil(isolated.length / perRow);
+    contentH = isoTop + 10 + rows * erdRowH;
+    isoSvg += isolated.map((k) => erdNodeSvg(byKey.get(k))).join("");
+  }
+
+  // Edges: source (dependent, right) → target (referenced, left), arrow at target.
+  let edges = "";
+  for (const { sk, tk, r } of rels) {
+    const s = byKey.get(sk);
+    const t = byKey.get(tk);
+    const sMidY = s.y + ERD_NODE_H / 2;
+    const tMidY = t.y + ERD_NODE_H / 2;
+    const rightward = t.x >= s.x;
+    const sx = rightward ? s.x + ERD_NODE_W : s.x;
+    const tx = rightward ? t.x : t.x + ERD_NODE_W;
+    const co = rightward ? 50 : -50;
+    edges += `<path class="erd-edge" d="M ${sx} ${sMidY} C ${sx + co} ${sMidY} ${tx - co} ${tMidY} ${tx} ${tMidY}" marker-end="url(#erd-arrow)"><title>${esc(r.relationship_meaning || r.relationship_type || "related")}</title></path>`;
+  }
+
+  // Module colour legend.
+  let lx = ERD_PAD;
+  const legend = [...moduleColour.entries()]
+    .map(([mod, colour]) => {
+      const item = `<rect x="${lx}" y="${ERD_PAD - 2}" width="11" height="11" rx="3" fill="${colour}"/><text class="erd-legend" x="${lx + 16}" y="${ERD_PAD + 7}">${esc(mod)}</text>`;
+      lx += 30 + mod.length * 7;
+      return item;
     })
     .join("");
 
-  const rects = nodes
-    .map((n) => {
-      const name = n.e.entity_name.length > 22 ? n.e.entity_name.slice(0, 21) + "…" : n.e.entity_name;
-      const cols = columnsFor(n.e).length;
-      return `<g class="erd-node" onclick="window.__erdSelect(${n.e.entity_metadata_id})">
-        <rect x="${n.x}" y="${n.y}" width="${NODE_W}" height="${NODE_H}" rx="7"
-              fill="var(--panel-2)" stroke="${n.colour}" stroke-width="1.5"/>
-        <rect x="${n.x}" y="${n.y}" width="4" height="${NODE_H}" rx="2" fill="${n.colour}"/>
-        <text class="erd-label" x="${n.x + 14}" y="${n.y + 17}">${esc(name)}</text>
-        <text class="erd-sub" x="${n.x + 14}" y="${n.y + 30}">${esc(n.e.table_name)} · ${cols} cols</text>
-        <title>${esc(n.e.database_name)}.${esc(n.e.table_name)}</title>
-      </g>`;
-    })
-    .join("");
+  const layered = [];
+  for (const ls of layers) for (const k of ls) layered.push(erdNodeSvg(byKey.get(k)));
 
+  const width = Math.max(layeredW, lx + ERD_PAD);
   el("detail").innerHTML = `
     <h2>${esc(d.product_name)} — Entity map</h2>
-    <p class="sub">${nodes.length} entities · ${drawn} relationships · click a node to open it</p>
+    <p class="sub">${byKey.size} entities · ${rels.length} relationships · left = referenced, right = dependent · click a node to open it</p>
     <div class="erd-scroll">
-      <svg class="erd" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <svg class="erd" width="${width}" height="${contentH}" viewBox="0 0 ${width} ${contentH}">
         <defs>
           <marker id="erd-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)"/>
           </marker>
         </defs>
-        ${edges}${heads}${rects}
+        ${legend}${edges}${layered.join("")}${isoSvg}
       </svg>
     </div>`;
   renderWarnings();
+}
+
+function barycenter(k, out, rank) {
+  const ts = [...out.get(k)].map((t) => rank.get(t)).filter((v) => v != null);
+  return ts.length ? ts.reduce((s, v) => s + v, 0) / ts.length : (rank.get(k) ?? 0);
 }
 
 // --- cookbook ----------------------------------------------------------------
