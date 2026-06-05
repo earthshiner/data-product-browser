@@ -10,7 +10,7 @@ const state = {
   data: null, // the DataProduct object
   activeEntity: null, // entity_metadata_id
   activeTab: "schema",
-  view: "health", // "health" | "entity"
+  view: "ops", // "ops" | "entity"
 };
 
 const el = (id) => document.getElementById(id);
@@ -68,10 +68,10 @@ async function loadProduct(name) {
     );
     state.data = data_product;
     state.warnings = warnings || [];
-    state.view = "health";
+    state.view = "ops";
     state.activeEntity = null;
     renderTree();
-    showHealth();
+    showOps();
     const counts = data_product;
     setStatus(
       `${counts.entities.length} entities · ${counts.columns.length} columns · ` +
@@ -107,17 +107,17 @@ function renderTree() {
   const tree = el("tree");
   tree.innerHTML = "";
 
-  const health = document.createElement("div");
-  health.className = "nav-special" + (state.view === "health" ? " active" : "");
-  health.innerHTML = "<span>📊</span><span>Product Health</span>";
-  health.onclick = () => {
-    state.view = "health";
+  const ops = document.createElement("div");
+  ops.className = "nav-special" + (state.view === "ops" ? " active" : "");
+  ops.innerHTML = "<span>📊</span><span>Operations</span>";
+  ops.onclick = () => {
+    state.view = "ops";
     state.activeEntity = null;
     renderTree();
-    showHealth();
+    showOps();
     el("detail").scrollTop = 0;
   };
-  tree.appendChild(health);
+  tree.appendChild(ops);
 
   for (const [moduleName, entities] of entitiesByModule()) {
     const visible = entities.filter(
@@ -329,7 +329,7 @@ function decisionsHTML(entity) {
     .join("");
 }
 
-// --- product health dashboard ------------------------------------------------
+// --- operations dashboard ----------------------------------------------------
 
 const MAX_ROWS = 50; // cap long observability tables
 
@@ -355,16 +355,96 @@ function ago(s, now) {
 }
 
 const isFailed = (status) => /fail|error/i.test(status || "");
+const isSuccess = (status) => /success|ok|positive|accept|complete/i.test(status || "");
 
-function showHealth() {
+// --- inline SVG charts (zero dependencies) ----------------------------------
+
+function sparkline(values, { w = 200, h = 40, stroke = "var(--accent)" } = {}) {
+  if (!values.length) return "";
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const span = max - min || 1;
+  const step = values.length > 1 ? w / (values.length - 1) : 0;
+  const pts = values
+    .map((v, i) => `${(i * step).toFixed(1)},${(h - ((v - min) / span) * (h - 6) - 3).toFixed(1)}`)
+    .join(" ");
+  return `<svg class="chart" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polyline fill="none" stroke="${stroke}" stroke-width="1.5" points="${pts}" /></svg>`;
+}
+
+function barChart(bars, { w = 260, h = 64 } = {}) {
+  if (!bars.length) return "";
+  const max = Math.max(...bars.map((b) => b.value), 1);
+  const bw = w / bars.length;
+  const rects = bars
+    .map((b, i) => {
+      const bh = b.value > 0 ? Math.max(1, (b.value / max) * (h - 4)) : 0;
+      const x = i * bw;
+      const fill = b.bad ? "var(--pii)" : "var(--accent)";
+      return `<rect x="${(x + 0.5).toFixed(1)}" y="${(h - bh).toFixed(1)}" width="${Math.max(1, bw - 1).toFixed(1)}" height="${bh.toFixed(1)}" fill="${fill}"><title>${esc(b.label)}: ${b.value}</title></rect>`;
+    })
+    .join("");
+  return `<svg class="chart" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${rects}</svg>`;
+}
+
+// Bucket items into the last `days` calendar days by an ISO timestamp field.
+function countByDay(items, field, now, days = 14) {
+  const dayMs = 86400000;
+  const end = new Date(now);
+  end.setUTCHours(0, 0, 0, 0);
+  const buckets = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(end.getTime() - i * dayMs);
+    buckets.push({ key: d.toISOString().slice(0, 10), label: d.toISOString().slice(5, 10), value: 0 });
+  }
+  const index = new Map(buckets.map((b) => [b.key, b]));
+  for (const it of items) {
+    const v = it[field];
+    if (!v) continue;
+    const b = index.get(String(v).slice(0, 10));
+    if (b) b.value += 1;
+  }
+  return buckets;
+}
+
+// Daily quality pass-rate (%) over the window, for a trend sparkline.
+function dailyPassRate(metrics, now, days = 14) {
+  const buckets = countByDay(metrics, "measured_dts", now, days).map((b) => ({ ...b, pass: 0, total: 0 }));
+  const index = new Map(buckets.map((b) => [b.key, b]));
+  for (const m of metrics) {
+    if (m.is_threshold_met == null || !m.measured_dts) continue;
+    const b = index.get(String(m.measured_dts).slice(0, 10));
+    if (!b) continue;
+    b.total += 1;
+    if (m.is_threshold_met) b.pass += 1;
+  }
+  return buckets.map((b) => (b.total ? Math.round((b.pass / b.total) * 100) : 0));
+}
+
+function chartCard(title, svg, caption) {
+  return `<div class="chart-card">
+    <div class="chart-title">${esc(title)}</div>
+    ${svg || '<div class="desc">No data.</div>'}
+    ${caption ? `<div class="chart-caption">${caption}</div>` : ""}
+  </div>`;
+}
+
+function showOps() {
   const d = state.data;
   const now = new Date(d.generated_dts).getTime();
 
   // is_threshold_met === 0 means the metric failed its threshold.
-  const qBad = d.quality_metrics.filter((m) => m.is_threshold_met === 0).length;
+  const qScored = d.quality_metrics.filter((m) => m.is_threshold_met != null);
+  const qPass = qScored.filter((m) => m.is_threshold_met).length;
+  const qRate = qScored.length ? Math.round((qPass / qScored.length) * 100) : null;
   const failedRuns = d.data_lineage.filter((r) => isFailed(r.run_status)).length;
   const runs = d.data_lineage.filter((r) => r.run_dts).sort((a, b) => (a.run_dts < b.run_dts ? 1 : -1));
   const lastRun = runs[0];
+
+  const outcomes = d.agent_outcomes || [];
+  const scored = outcomes.filter((o) => o.outcome_status);
+  const agentOk = scored.filter((o) => isSuccess(o.outcome_status)).length;
+  const agentRate = scored.length ? Math.round((agentOk / scored.length) * 100) : null;
 
   const stat = (cls, big, lbl) =>
     `<div class="stat ${cls}"><div class="big">${big}</div><div class="lbl">${lbl}</div></div>`;
@@ -374,26 +454,42 @@ function showHealth() {
     ? stat(
         t.agent_use_allowed ? "ok" : "bad",
         t.data_product_trust_score != null ? `${t.data_product_trust_score}` : esc(t.trust_status) || "—",
-        `Trust score${t.trust_status ? " · " + esc(t.trust_status) : ""}`,
+        `Trust${t.trust_status ? " · " + esc(t.trust_status) : ""}`,
       )
     : "";
 
   const cards = `<div class="summary-cards">
     ${trustCard}
-    ${stat(qBad ? "bad" : "ok", `${qBad}/${d.quality_metrics.length}`, "Quality metrics failing threshold")}
+    ${stat(qRate != null && qRate < 100 ? "warn" : "ok", qRate == null ? "—" : qRate + "%", "Quality pass rate")}
     ${stat(failedRuns ? "bad" : "ok", failedRuns, "Failed lineage runs")}
     ${stat("", lastRun ? ago(lastRun.run_dts, now) : "—", "Last lineage run")}
-    ${stat("", d.change_events.length, "Change events in window")}
+    ${stat("", d.change_events.length, "Change events (window)")}
+    ${stat("", agentRate == null ? "—" : agentRate + "%", "Agent success rate")}
+  </div>`;
+
+  const passSeries = dailyPassRate(d.quality_metrics, now);
+  const changeBars = countByDay(d.change_events, "change_dts", now);
+  const runBars = runs
+    .slice(0, 20)
+    .reverse()
+    .map((r) => ({ label: r.job_name || "run", value: r.records_written || 0, bad: isFailed(r.run_status) }));
+
+  const charts = `<div class="charts-row">
+    ${chartCard("Quality pass-rate trend (14d)", sparkline(passSeries), passSeries.length ? `latest ${passSeries[passSeries.length - 1]}%` : "")}
+    ${chartCard("Change volume (14d)", barChart(changeBars), `${d.change_events.length} events`)}
+    ${chartCard("Records written per run", barChart(runBars), `${runs.length} runs · ${failedRuns} failed`)}
   </div>`;
 
   el("detail").innerHTML = `
-    <h2>${esc(d.product_name)} — Product Health</h2>
+    <h2>${esc(d.product_name)} — Operations</h2>
     <p class="sub">Snapshot ${fmtDate(d.generated_dts)} UTC · ${esc((d.registry && d.registry.product_version) || "")}</p>
     ${cards}
+    ${charts}
     ${trustDetail(t)}
     ${qualityTable(d)}
     ${lineageTable(d, now)}
-    ${changeTable(d)}`;
+    ${changeTable(d)}
+    ${agentTable(d, now)}`;
   renderWarnings();
 }
 
@@ -486,6 +582,45 @@ function changeTable(d) {
     .join("");
   return `<h3 class="section-title">Change activity</h3>${truncNote(d.change_events.length)}
     <table><thead><tr><th>When</th><th>Object</th><th>Type</th><th>Rows</th><th>By</th><th>Source</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function agentTable(d, now) {
+  const outcomes = d.agent_outcomes || [];
+  if (!outcomes.length) return "";
+
+  // Status breakdown pills.
+  const counts = {};
+  for (const o of outcomes) {
+    const k = o.outcome_status || "unknown";
+    counts[k] = (counts[k] || 0) + 1;
+  }
+  const pills = Object.entries(counts)
+    .map(([k, n]) => `<span class="pill ${isSuccess(k) ? "ok" : isFailed(k) ? "bad" : ""}">${esc(k)}: ${n}</span>`)
+    .join(" ");
+
+  const rows = outcomes
+    .slice(0, MAX_ROWS)
+    .map((o) => {
+      const cls = o.outcome_status
+        ? isSuccess(o.outcome_status)
+          ? "status-ok"
+          : isFailed(o.outcome_status)
+            ? "status-bad"
+            : "desc"
+        : "desc";
+      return `<tr>
+        <td>${fmtDate(o.action_dts)}</td>
+        <td>${esc(o.action_type) || "—"}</td>
+        <td class="${cls}">${esc(o.outcome_status) || "—"}</td>
+        <td class="num">${fmtNum(o.execution_time_ms)}</td>
+        <td class="num">${fmtNum(o.records_processed)}</td>
+      </tr>`;
+    })
+    .join("");
+  return `<h3 class="section-title">Agent outcomes</h3>
+    <div class="pill-row">${pills}</div>${truncNote(outcomes.length)}
+    <table><thead><tr><th>When</th><th>Action</th><th>Outcome</th><th>Exec ms</th><th>Records</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
 }
 
