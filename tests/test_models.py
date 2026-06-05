@@ -170,6 +170,18 @@ class TestDataProductModel:
         )
         assert entity.entity_name == "X"
 
+    def test_agent_outcome_string_keys(self):
+        # agent_key / session_key are semantic string keys, not integers.
+        from data_product_browser.models import AgentOutcome
+
+        o = AgentOutcome(
+            outcome_id=57,
+            agent_key="claude-sonnet-4-report-agent",
+            session_key="sess-20260528-8060",
+            action_dts=datetime.now(timezone.utc),
+        )
+        assert o.agent_key == "claude-sonnet-4-report-agent"
+
     def test_relationship_uses_source_target(self):
         dp = _minimal_product()
         rel = dp.relationships[0]

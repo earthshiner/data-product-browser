@@ -369,8 +369,8 @@ class AgentOutcome(_Base):
     """<observability>.agent_outcome"""
 
     outcome_id: int
-    agent_key: Optional[int] = None
-    session_key: Optional[int] = None
+    agent_key: Optional[str] = None
+    session_key: Optional[str] = None
     action_type: Optional[str] = None
     action_dts: datetime
     tables_accessed: Optional[str] = None
