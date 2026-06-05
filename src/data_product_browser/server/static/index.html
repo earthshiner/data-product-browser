@@ -123,6 +123,23 @@
     .erd-sub { fill: var(--muted); font-size: 10px; font-family: ui-monospace, Menlo, Consolas, monospace; }
     .erd-head { fill: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
     .erd-edge { fill: none; stroke: var(--muted); stroke-width: 1.3; opacity: .55; }
+    .cookbook-search { width: 100%; max-width: 420px; margin-bottom: 16px; background: var(--panel-2);
+      color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; }
+    .recipe { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+    .recipe h4 { margin: 0 0 6px; font-size: 15px; }
+    .code-head { display: flex; justify-content: space-between; align-items: center; margin: 10px 0 0; }
+    .recipe-id { color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; }
+    .copy-btn { background: var(--panel-2); color: var(--accent); border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+    .copy-btn:hover:not(:disabled) { border-color: var(--accent); }
+    .copy-btn:disabled { color: var(--ok); border-color: var(--ok); cursor: default; }
+    pre.sql { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
+      overflow-x: auto; margin: 6px 0 10px; }
+    pre.sql code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.5; white-space: pre; }
+    .sql-keyword { color: #79c0ff; font-weight: 600; }
+    .sql-string { color: #a5d6ff; }
+    .sql-number { color: #f0883e; }
+    .sql-comment { color: var(--muted); font-style: italic; }
   </style>
 </head>
 <body>
