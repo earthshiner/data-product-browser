@@ -166,16 +166,33 @@ function renderTree() {
   }
 }
 
-// Case-insensitive match against both the base table and the entity's companion view.
-// Curated metadata is sometimes captured against the view name (e.g. *_Current) rather
-// than the underlying history table (*_H), so accept either.
+// Case-insensitive match against all entity-name variants — accepts the table,
+// the companion view, the entity name, and the same with SCD2 suffixes stripped.
+// Also tolerates qualified "<db>.<table>" values in column_metadata.
 function columnsFor(entity) {
-  const tbl = (entity.table_name || "").toLowerCase();
-  const vw = (entity.view_name || "").toLowerCase();
-  return state.data.columns.filter((c) => {
+  const variants = _entityNameVariants(entity);
+  return state.data.columns.filter((c) => _qualifiedMatches(c.table_name, variants));
+}
+
+// Surface near-misses so the user knows whether curated rows exist at all.
+// Returns a list of {table_name, count} for any column_metadata table whose name
+// shares a token with the entity but didn't match — i.e. probably a casing or
+// suffix mismatch the matcher couldn't recover from.
+function columnsDiagnostic(entity) {
+  if (columnsFor(entity).length) return null;
+  const variants = _entityNameVariants(entity);
+  const tokens = new Set();
+  variants.forEach((v) => v.split(/[_.]/).filter((t) => t.length >= 3).forEach((t) => tokens.add(t)));
+  if (!tokens.size) return null;
+  const counts = new Map();
+  for (const c of state.data.columns) {
     const ct = (c.table_name || "").toLowerCase();
-    return ct === tbl || (vw && ct === vw);
-  });
+    const last = ct.includes(".") ? ct.slice(ct.lastIndexOf(".") + 1) : ct;
+    if ([...tokens].some((t) => last.includes(t))) {
+      counts.set(c.table_name, (counts.get(c.table_name) || 0) + 1);
+    }
+  }
+  return counts.size ? [...counts.entries()].map(([table_name, count]) => ({ table_name, count })) : null;
 }
 
 function selectEntity(key) {
@@ -356,7 +373,31 @@ function schemaHTML(entity) {
       </tr>`;
     })
     .join("");
-  return `<table>
+  let diag = "";
+  if (!rows) {
+    const near = columnsDiagnostic(entity);
+    if (near && near.length) {
+      const list = near
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 6)
+        .map((n) => `<li><code>${esc(n.table_name)}</code> — ${n.count} column${n.count === 1 ? "" : "s"}</li>`)
+        .join("");
+      diag = `<div class="diagnostic">
+        <strong>No column_metadata rows match this entity exactly.</strong>
+        Curated rows tagged against similar names (likely a deployed-vs-logical
+        prefix mismatch — see <code>docs/fixes/business-glossary-related-table-realign.sql</code>
+        for the same pattern on the Glossary):
+        <ul>${list}</ul>
+      </div>`;
+    } else {
+      diag = `<div class="diagnostic">
+        <strong>No column_metadata rows curated for this entity.</strong>
+        Confirm by querying <code>&lt;semantic&gt;.column_metadata</code> for
+        <code>${esc(entity.table_name)}</code> directly.
+      </div>`;
+    }
+  }
+  return `${diag}<table>
       <thead><tr><th>Column</th><th>Type</th><th>Description</th><th>Classification</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="4" class="desc">No column metadata.</td></tr>'}</tbody>
     </table>`;
@@ -581,6 +622,9 @@ function showOps() {
 
 function trustDetail(t) {
   if (!t) return "";
+  const status = (t.trust_status || "").toUpperCase();
+  const trusted = status === "TRUSTED";
+  const mood = trusted ? "trusted" : "untrusted";
   const checks =
     t.total_checks != null ? `${t.passed_count ?? "—"}/${t.total_checks} checks passed` : "";
   const scores = [
@@ -589,14 +633,20 @@ function trustDetail(t) {
     ["Operational readiness", t.operational_readiness_score],
   ]
     .filter((s) => s[1] != null)
-    .map((s) => `<span class="pill">${s[0]}: ${s[1]}</span>`)
-    .join(" ");
-  return `<div class="card">
-    <h4>Trust engine <span class="pill">${esc(t.trust_status) || "—"}</span>
-      ${t.agent_use_allowed ? '<span class="pill">agent use allowed</span>' : '<span class="pill">agent use blocked</span>'}</h4>
-    <p class="desc">${checks}${t.failed_count ? ` · ${t.failed_count} failed` : ""}${t.critical_failure_count ? ` · ${t.critical_failure_count} critical` : ""}</p>
-    <div>${scores}</div>
-  </div>`;
+    .map((s) => `<span class="trust-score">${s[0]}: <strong>${s[1]}</strong></span>`)
+    .join("");
+  const agent = t.agent_use_allowed
+    ? '<span class="trust-agent ok">✓ agent use allowed</span>'
+    : '<span class="trust-agent bad">⛔ agent use blocked</span>';
+  return `<section class="trust-banner trust-${mood}">
+    <div class="trust-banner-head">
+      <span class="trust-status-badge">${esc(t.trust_status) || "—"}</span>
+      <span class="trust-banner-title">Trust engine</span>
+      ${agent}
+    </div>
+    <p class="trust-banner-checks">${checks}${t.failed_count ? ` · <span class="bad-num">${t.failed_count} failed</span>` : ""}${t.critical_failure_count ? ` · <span class="crit-num">${t.critical_failure_count} critical</span>` : ""}</p>
+    <div class="trust-scores">${scores}</div>
+  </section>`;
 }
 
 function truncNote(total) {
