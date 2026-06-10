@@ -897,8 +897,10 @@ const SQL_KEYWORDS = new Set([
 let cookbookQuery = "";
 let cookbookMode = "all"; // "all" | "interactive" | "batch"
 
-// A recipe is interactive if it has named parameters the caller can tweak.
+// Prefer the explicit Query_Cookbook.is_batch column; fall back to a param-presence heuristic.
 function recipeMode(r) {
+  if (r.is_batch === 1 || r.is_batch === true) return "batch";
+  if (r.is_batch === 0 || r.is_batch === false) return "interactive";
   return /:[A-Za-z_][A-Za-z0-9_]*/.test(r.sql_template || "") ? "interactive" : "batch";
 }
 

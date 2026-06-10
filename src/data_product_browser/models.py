@@ -179,6 +179,7 @@ class Recipe(_Base):
     parameter_descriptions: Optional[str] = None
     performance_notes: Optional[str] = None
     complexity: str
+    is_batch: Optional[int] = None
     source_module: str
     module_version: Optional[str] = None
     is_active: int = 1
