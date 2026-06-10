@@ -149,6 +149,29 @@ def collect(
             "WHERE is_active = 1 ORDER BY module_name, entity_name",
         )
         columns = q_opt(sem, "column_metadata", ColumnMetadata, "WHERE is_active = 1")
+        # Overlay the friendly data_type from column_catalogue when the view is
+        # deployed. column_metadata stores the raw dictionary code ('D', 'CV'),
+        # while column_catalogue decodes it to 'DECIMAL(7,4)', 'VARCHAR(50)',
+        # etc., and also surfaces overrides for view columns DBC can't report.
+        if sem and columns:
+            try:
+                cur.execute(
+                    f"SELECT catalogue_database, catalogue_table, column_name, data_type "
+                    f"FROM {sem}.column_catalogue"
+                )
+                type_map = {
+                    (str(r[0]).strip(), str(r[1]).strip(), str(r[2]).strip()): r[3]
+                    for r in cur.fetchall()
+                    if r[3]
+                }
+                for c in columns:
+                    friendly = type_map.get((c.database_name, c.table_name, c.column_name))
+                    if friendly:
+                        c.data_type = friendly
+            except Exception as exc:
+                warnings.append(
+                    f"⚠  Skipped column_catalogue type overlay: {str(exc).splitlines()[0]}"
+                )
         relationships = q_opt(sem, "table_relationship", TableRelationship, "WHERE is_active = 1")
         trust_rows = q_opt(sem, "trust_engine_latest", TrustReport)
         view_metadata = q_opt(
