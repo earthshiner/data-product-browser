@@ -895,6 +895,12 @@ const SQL_KEYWORDS = new Set([
 ]);
 
 let cookbookQuery = "";
+let cookbookMode = "all"; // "all" | "interactive" | "batch"
+
+// A recipe is interactive if it has named parameters the caller can tweak.
+function recipeMode(r) {
+  return /:[A-Za-z_][A-Za-z0-9_]*/.test(r.sql_template || "") ? "interactive" : "batch";
+}
 
 // Lightweight SQL syntax highlighter (escapes first, then wraps tokens).
 function highlightSql(sql) {
@@ -933,19 +939,22 @@ function complexityClass(c) {
 
 // Build the HTML for one recipe card. `i` indexes state.data.recipes for copy.
 function recipeCard(r, i) {
-  return `<div class="recipe">
+  const mode = recipeMode(r);
+  const modeLabel = mode === "interactive" ? "Interactive" : "Batch";
+  return `<div class="recipe ${mode === "batch" ? "is-batch" : ""}">
     <h4>${esc(r.recipe_title)}
+      <span class="pill mode-${mode}">${modeLabel}</span>
       <span class="pill ${complexityClass(r.complexity)}">${esc(r.complexity) || "—"}</span>
       ${r.target_module ? `<span class="pill">${esc(r.target_module)}</span>` : ""}</h4>
-    ${r.recipe_description ? `<p class="desc">${esc(r.recipe_description)}</p>` : ""}
-    ${r.use_case ? `<p class="desc"><strong>Use case:</strong> ${esc(r.use_case)}</p>` : ""}
+    ${r.recipe_description ? `<p class="business-q">${esc(r.recipe_description)}</p>` : ""}
+    ${r.use_case ? `<p class="use-case"><strong>Use case:</strong> ${esc(r.use_case)}</p>` : ""}
     <div class="code-head">
       <span class="recipe-id">${esc(r.recipe_id)}</span>
       <button class="copy-btn" onclick="window.__copySql(${i}, this)">Copy SQL</button>
     </div>
     <pre class="sql"><code>${highlightSql(r.sql_template || "")}</code></pre>
-    ${r.parameter_descriptions ? `<p class="desc"><strong>Parameters:</strong> ${esc(r.parameter_descriptions)}</p>` : ""}
-    ${r.performance_notes ? `<p class="desc">⚡ ${esc(r.performance_notes)}</p>` : ""}
+    ${r.parameter_descriptions ? `<p class="params-note"><strong>Parameters:</strong> ${esc(r.parameter_descriptions)}</p>` : ""}
+    ${r.performance_notes ? `<p class="perf-note">⚡ ${esc(r.performance_notes)}</p>` : ""}
   </div>`;
 }
 
@@ -956,20 +965,41 @@ function recipeListHtml() {
     [r.recipe_title, r.recipe_description, r.use_case, r.target_module, r.sql_template].some((f) =>
       (f || "").toLowerCase().includes(q),
     );
+  const modeMatch = (r) => cookbookMode === "all" || recipeMode(r) === cookbookMode;
   const cards = (state.data.recipes || [])
     .map((r, i) => ({ r, i }))
-    .filter(({ r }) => match(r))
+    .filter(({ r }) => match(r) && modeMatch(r))
     .map(({ r, i }) => recipeCard(r, i))
     .join("");
   return cards || '<div class="empty">No recipes match.</div>';
 }
 
+window.__setCookbookMode = (mode) => {
+  cookbookMode = mode;
+  document.querySelectorAll(".mode-filter button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.mode === mode);
+  });
+  el("recipe-list").innerHTML = recipeListHtml();
+};
+
 function showCookbook() {
   const d = state.data;
+  const all = d.recipes || [];
+  const interactive = all.filter((r) => recipeMode(r) === "interactive").length;
+  const batch = all.length - interactive;
+  const btn = (mode, label, n) =>
+    `<button data-mode="${mode}" class="${cookbookMode === mode ? "active" : ""}" onclick="window.__setCookbookMode('${mode}')">${label} (${n})</button>`;
   el("detail").innerHTML = `
     <h2>${esc(d.product_name)} — Cookbook</h2>
-    <p class="sub">${(d.recipes || []).length} recipes · ready-to-run query templates from the standard's Memory module</p>
-    <input id="cookbook-search" class="cookbook-search" type="search" placeholder="Search recipes…" value="${esc(cookbookQuery)}" />
+    <p class="sub">${all.length} recipes · ready-to-run query templates from the standard's Memory module</p>
+    <div class="cookbook-toolbar">
+      <input id="cookbook-search" class="cookbook-search" type="search" placeholder="Search recipes…" value="${esc(cookbookQuery)}" />
+      <div class="mode-filter">
+        ${btn("all", "All", all.length)}
+        ${btn("interactive", "Interactive", interactive)}
+        ${btn("batch", "Batch", batch)}
+      </div>
+    </div>
     <div id="recipe-list">${recipeListHtml()}</div>`;
 
   const search = el("cookbook-search");

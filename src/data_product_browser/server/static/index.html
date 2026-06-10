@@ -165,8 +165,45 @@
     .erd-legend { fill: var(--muted); font-size: 11px; }
     .cookbook-search { width: 100%; max-width: 420px; margin-bottom: 16px; background: var(--panel-2);
       color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; }
-    .recipe { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
-    .recipe h4 { margin: 0 0 6px; font-size: 15px; }
+    .recipe {
+      background: linear-gradient(180deg, #1f2a36 0%, var(--panel) 100%);
+      border: 1px solid var(--border); border-left: 4px solid var(--td-orange);
+      border-radius: 10px; padding: 18px 20px; margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    }
+    .recipe.is-batch { border-left-color: var(--td-blue); }
+    .recipe h4 {
+      margin: 0 0 8px; font-size: 18px; font-weight: 700;
+      color: #ffd9b3; letter-spacing: .01em;
+    }
+    .recipe .business-q {
+      font-size: 14.5px; color: var(--text); margin: 0 0 8px; line-height: 1.55;
+    }
+    .recipe .use-case {
+      font-size: 14px; color: #e6edf3; margin: 0 0 10px;
+    }
+    .recipe .use-case strong { color: var(--td-teal); font-weight: 700; }
+    .recipe .params-note { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+    .recipe .params-note strong { color: var(--td-orange); font-weight: 700; }
+    .recipe .perf-note { font-size: 12.5px; color: #f0d9a8; margin-top: 6px; }
+    .pill.mode-interactive {
+      background: rgba(0,181,226,.18); color: var(--td-blue);
+      border-color: var(--td-blue); font-weight: 700;
+    }
+    .pill.mode-batch {
+      background: rgba(243,108,33,.18); color: var(--td-orange);
+      border-color: var(--td-orange); font-weight: 700;
+    }
+    .cookbook-toolbar {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px;
+    }
+    .mode-filter { display: inline-flex; gap: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .mode-filter button {
+      background: var(--panel-2); color: var(--muted); border: 0; padding: 7px 14px;
+      font-size: 12px; font-weight: 600; cursor: pointer; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .mode-filter button:hover { color: var(--text); }
+    .mode-filter button.active { background: var(--td-orange); color: #1a1a1a; }
     .code-head { display: flex; justify-content: space-between; align-items: center; margin: 10px 0 0; }
     .recipe-id { color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; }
     .copy-btn { background: var(--panel-2); color: var(--accent); border: 1px solid var(--border);
