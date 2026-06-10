@@ -166,20 +166,42 @@
     .erd-legend { fill: var(--muted); font-size: 11px; }
     .cookbook-search { width: 100%; max-width: 420px; margin-bottom: 16px; background: var(--panel-2);
       color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; }
-    .recipe {
+    details.recipe {
       background: linear-gradient(180deg, #1f2a36 0%, var(--panel) 100%);
       border: 1px solid var(--border); border-left: 4px solid var(--td-orange);
-      border-radius: 10px; padding: 18px 20px; margin-bottom: 16px;
-      box-shadow: 0 1px 3px rgba(0,0,0,.25);
+      border-radius: 10px; margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.25); overflow: hidden;
     }
-    .recipe.is-batch { border-left-color: var(--td-blue); }
-    .recipe h4 {
-      margin: 0 0 10px; font-size: 20px; font-weight: 700;
-      color: #ffd9b3; letter-spacing: .01em;
-      display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    details.recipe.is-batch { border-left-color: var(--td-blue); }
+    details.recipe > summary {
+      cursor: pointer; list-style: none; padding: 16px 20px;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+      user-select: none;
     }
-    .recipe h4 .pill { font-size: 12px; padding: 4px 12px; border-radius: 14px;
-      border-width: 1.5px; margin: 0; }
+    details.recipe > summary::-webkit-details-marker { display: none; }
+    details.recipe > summary::before {
+      content: "▸"; color: var(--muted); font-size: 13px;
+      transition: transform .15s ease; display: inline-block; width: 14px; flex-shrink: 0;
+    }
+    details.recipe[open] > summary::before { transform: rotate(90deg); color: var(--td-orange); }
+    details.recipe.is-batch[open] > summary::before { color: var(--td-blue); }
+    details.recipe > summary:hover { background: rgba(255,255,255,.02); }
+    details.recipe > summary .recipe-title {
+      font-size: 20px; font-weight: 700; color: #ffd9b3; letter-spacing: .01em;
+      flex: 1 1 auto; min-width: 200px;
+    }
+    details.recipe > summary .pill {
+      font-size: 12px; padding: 4px 12px; border-radius: 14px;
+      border-width: 1.5px; margin: 0;
+    }
+    details.recipe > .recipe-body { padding: 0 20px 18px; }
+    .cookbook-tools { display: inline-flex; gap: 6px; margin-left: auto; }
+    .cookbook-tools button {
+      background: var(--panel-2); color: var(--muted); border: 1px solid var(--border);
+      border-radius: 6px; padding: 7px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .cookbook-tools button:hover { color: var(--text); border-color: var(--accent); }
     .recipe .business-q {
       font-size: 14.5px; color: var(--text); margin: 0 0 8px; line-height: 1.55;
     }
@@ -252,6 +274,6 @@
     <nav id="tree"></nav>
     <main id="detail"><div class="empty">Select a data product to begin.</div></main>
   </div>
-  <script src="/app.js?v=3"></script>
+  <script src="/app.js?v=4"></script>
 </body>
 </html>

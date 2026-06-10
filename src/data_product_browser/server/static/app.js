@@ -166,10 +166,16 @@ function renderTree() {
   }
 }
 
+// Case-insensitive match against both the base table and the entity's companion view.
+// Curated metadata is sometimes captured against the view name (e.g. *_Current) rather
+// than the underlying history table (*_H), so accept either.
 function columnsFor(entity) {
-  return state.data.columns.filter(
-    (c) => c.database_name === entity.database_name && c.table_name === entity.table_name,
-  );
+  const tbl = (entity.table_name || "").toLowerCase();
+  const vw = (entity.view_name || "").toLowerCase();
+  return state.data.columns.filter((c) => {
+    const ct = (c.table_name || "").toLowerCase();
+    return ct === tbl || (vw && ct === vw);
+  });
 }
 
 function selectEntity(key) {
@@ -223,14 +229,27 @@ function relationshipsFor(entity) {
   return out;
 }
 
+// Strip the SCD2 history suffix so curated terms tagged against the logical entity
+// (e.g. "Call_Summary") still match the deployed *_H table.
+function _entityNameVariants(entity) {
+  const out = new Set();
+  const push = (s) => s && out.add(s.toLowerCase());
+  push(entity.table_name);
+  push(entity.view_name);
+  push(entity.entity_name);
+  if (entity.table_name) push(entity.table_name.replace(/_H$/i, ""));
+  if (entity.view_name) push(entity.view_name.replace(/_Current$/i, ""));
+  return out;
+}
+
 function glossaryFor(entity) {
-  const t = (entity.table_name || "").toLowerCase();
-  return state.data.glossary.filter((g) => (g.related_table || "").toLowerCase() === t);
+  const variants = _entityNameVariants(entity);
+  return state.data.glossary.filter((g) => variants.has((g.related_table || "").toLowerCase()));
 }
 
 function decisionsFor(entity) {
-  const t = (entity.table_name || "").toLowerCase();
-  return state.data.decisions.filter((d) => (d.affects_table || "").toLowerCase() === t);
+  const variants = _entityNameVariants(entity);
+  return state.data.decisions.filter((d) => variants.has((d.affects_table || "").toLowerCase()));
 }
 
 // Views exposing this entity's base table (1:M), primary first.
@@ -943,21 +962,25 @@ function complexityClass(c) {
 function recipeCard(r, i) {
   const mode = recipeMode(r);
   const modeLabel = mode === "interactive" ? "Interactive" : "Batch";
-  return `<div class="recipe ${mode === "batch" ? "is-batch" : ""}">
-    <h4>${esc(r.recipe_title)}
+  return `<details class="recipe ${mode === "batch" ? "is-batch" : ""}">
+    <summary>
+      <span class="recipe-title">${esc(r.recipe_title)}</span>
       <span class="pill mode-${mode}">${modeLabel}</span>
       <span class="pill ${complexityClass(r.complexity)}">${esc(r.complexity) || "—"}</span>
-      ${r.target_module ? `<span class="pill">${esc(r.target_module)}</span>` : ""}</h4>
-    ${r.recipe_description ? `<p class="business-q">${esc(r.recipe_description)}</p>` : ""}
-    ${r.use_case ? `<p class="use-case"><strong>Use case:</strong> ${esc(r.use_case)}</p>` : ""}
-    <div class="code-head">
-      <span class="recipe-id">${esc(r.recipe_id)}</span>
-      <button class="copy-btn" onclick="window.__copySql(${i}, this)">Copy SQL</button>
+      ${r.target_module ? `<span class="pill">${esc(r.target_module)}</span>` : ""}
+    </summary>
+    <div class="recipe-body">
+      ${r.recipe_description ? `<p class="business-q">${esc(r.recipe_description)}</p>` : ""}
+      ${r.use_case ? `<p class="use-case"><strong>Use case:</strong> ${esc(r.use_case)}</p>` : ""}
+      <div class="code-head">
+        <span class="recipe-id">${esc(r.recipe_id)}</span>
+        <button class="copy-btn" onclick="window.__copySql(${i}, this)">Copy SQL</button>
+      </div>
+      <pre class="sql"><code>${highlightSql(r.sql_template || "")}</code></pre>
+      ${r.parameter_descriptions ? `<p class="params-note"><strong>Parameters:</strong> ${esc(r.parameter_descriptions)}</p>` : ""}
+      ${r.performance_notes ? `<p class="perf-note">⚡ ${esc(r.performance_notes)}</p>` : ""}
     </div>
-    <pre class="sql"><code>${highlightSql(r.sql_template || "")}</code></pre>
-    ${r.parameter_descriptions ? `<p class="params-note"><strong>Parameters:</strong> ${esc(r.parameter_descriptions)}</p>` : ""}
-    ${r.performance_notes ? `<p class="perf-note">⚡ ${esc(r.performance_notes)}</p>` : ""}
-  </div>`;
+  </details>`;
 }
 
 function recipeListHtml() {
@@ -975,6 +998,13 @@ function recipeListHtml() {
     .join("");
   return cards || '<div class="empty">No recipes match.</div>';
 }
+
+window.__toggleRecipes = (open) => {
+  document.querySelectorAll("#recipe-list details.recipe").forEach((d) => {
+    if (open) d.setAttribute("open", "");
+    else d.removeAttribute("open");
+  });
+};
 
 window.__setCookbookMode = (mode) => {
   cookbookMode = mode;
@@ -1000,6 +1030,10 @@ function showCookbook() {
         ${btn("all", "All", all.length)}
         ${btn("interactive", "Interactive", interactive)}
         ${btn("batch", "Batch", batch)}
+      </div>
+      <div class="cookbook-tools">
+        <button onclick="window.__toggleRecipes(true)">Expand all</button>
+        <button onclick="window.__toggleRecipes(false)">Collapse all</button>
       </div>
     </div>
     <div id="recipe-list">${recipeListHtml()}</div>`;
