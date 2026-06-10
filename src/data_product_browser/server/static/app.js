@@ -953,9 +953,33 @@ window.__copySql = (i, btn) => {
 
 function complexityClass(c) {
   const v = (c || "").toUpperCase();
-  if (v === "SIMPLE") return "ok";
-  if (v === "COMPLEX" || v === "ADVANCED") return "bad";
+  if (v === "SIMPLE" || v === "LOW" || v === "EASY") return "ok";
+  if (v === "MED" || v === "MEDIUM" || v === "MODERATE") return "warn";
+  if (v === "COMPLEX" || v === "ADVANCED" || v === "HIGH" || v === "HARD") return "bad";
   return "";
+}
+
+// Deterministic colour assignment for target_module pills so each module is
+// visually distinct in the cookbook.
+const MODULE_PILL_PALETTE = [
+  "mod-purple",
+  "mod-teal",
+  "mod-amber",
+  "mod-pink",
+  "mod-lime",
+  "mod-violet",
+  "mod-cyan",
+];
+const _modulePillCache = new Map();
+function modulePillClass(name) {
+  const k = (name || "").toLowerCase();
+  if (!k) return "";
+  if (_modulePillCache.has(k)) return _modulePillCache.get(k);
+  let h = 0;
+  for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
+  const cls = MODULE_PILL_PALETTE[h % MODULE_PILL_PALETTE.length];
+  _modulePillCache.set(k, cls);
+  return cls;
 }
 
 // Build the HTML for one recipe card. `i` indexes state.data.recipes for copy.
@@ -967,7 +991,7 @@ function recipeCard(r, i) {
       <span class="recipe-title">${esc(r.recipe_title)}</span>
       <span class="pill mode-${mode}">${modeLabel}</span>
       <span class="pill ${complexityClass(r.complexity)}">${esc(r.complexity) || "—"}</span>
-      ${r.target_module ? `<span class="pill">${esc(r.target_module)}</span>` : ""}
+      ${r.target_module ? `<span class="pill ${modulePillClass(r.target_module)}">${esc(r.target_module)}</span>` : ""}
     </summary>
     <div class="recipe-body">
       ${r.recipe_description ? `<p class="business-q">${esc(r.recipe_description)}</p>` : ""}
