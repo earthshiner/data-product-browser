@@ -595,9 +595,11 @@ function qualityTable(d) {
       </tr>`,
     )
     .join("");
-  return `<h3 class="section-title">Data quality</h3>${truncNote(d.quality_metrics.length)}
+  return `<details class="ops-section ops-quality">
+    <summary>Data quality<span class="count">${d.quality_metrics.length} metrics</span></summary>
+    <div class="ops-body">${truncNote(d.quality_metrics.length)}
     <table><thead><tr><th>Object</th><th>Metric</th><th>Value</th><th>Threshold</th><th>Status</th><th>Measured</th></tr></thead>
-    <tbody>${rows}</tbody></table>`;
+    <tbody>${rows}</tbody></table></div></details>`;
 }
 
 function lineageTable(d, now) {
@@ -623,9 +625,11 @@ function lineageTable(d, now) {
       </tr>`;
     })
     .join("");
-  return `<h3 class="section-title">Lineage runs</h3>${truncNote(runs.length)}
+  return `<details class="ops-section ops-lineage">
+    <summary>Lineage runs<span class="count">${runs.length} runs</span></summary>
+    <div class="ops-body">${truncNote(runs.length)}
     <table><thead><tr><th>Job</th><th>Target</th><th>Status</th><th>When</th><th>Read</th><th>Written</th><th>Rejected</th></tr></thead>
-    <tbody>${rows}</tbody></table>`;
+    <tbody>${rows}</tbody></table></div></details>`;
 }
 
 function changeTable(d) {
@@ -643,9 +647,11 @@ function changeTable(d) {
       </tr>`,
     )
     .join("");
-  return `<h3 class="section-title">Change activity</h3>${truncNote(d.change_events.length)}
+  return `<details class="ops-section ops-change">
+    <summary>Change activity<span class="count">${d.change_events.length} events</span></summary>
+    <div class="ops-body">${truncNote(d.change_events.length)}
     <table><thead><tr><th>When</th><th>Object</th><th>Type</th><th>Rows</th><th>By</th><th>Source</th></tr></thead>
-    <tbody>${rows}</tbody></table>`;
+    <tbody>${rows}</tbody></table></div></details>`;
 }
 
 function agentTable(d, now) {
@@ -681,10 +687,12 @@ function agentTable(d, now) {
       </tr>`;
     })
     .join("");
-  return `<h3 class="section-title">Agent outcomes</h3>
+  return `<details class="ops-section ops-agent">
+    <summary>Agent outcomes<span class="count">${outcomes.length} outcomes</span></summary>
+    <div class="ops-body">
     <div class="pill-row">${pills}</div>${truncNote(outcomes.length)}
     <table><thead><tr><th>When</th><th>Action</th><th>Outcome</th><th>Exec ms</th><th>Records</th></tr></thead>
-    <tbody>${rows}</tbody></table>`;
+    <tbody>${rows}</tbody></table></div></details>`;
 }
 
 // --- entity map (ERD) --------------------------------------------------------
