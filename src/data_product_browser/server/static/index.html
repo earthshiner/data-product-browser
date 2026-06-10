@@ -108,6 +108,44 @@
     .status-bad { color: var(--pii); font-weight: 600; }
     td.num { text-align: right; font-variant-numeric: tabular-nums; }
     .section-title { font-size: 15px; margin: 26px 0 8px; }
+    /* Collapsible operations sections — Teradata brand accents */
+    :root {
+      --td-orange: #F36C21;  /* Teradata Orange */
+      --td-blue:   #00B5E2;  /* Teradata Sky Blue */
+      --td-navy:   #394C71;  /* Teradata Navy accent */
+      --td-teal:   #00A7B5;  /* Teradata Teal */
+    }
+    details.ops-section {
+      border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px;
+      background: var(--panel); margin: 14px 0; overflow: hidden;
+    }
+    details.ops-section > summary {
+      cursor: pointer; list-style: none; padding: 12px 16px;
+      display: flex; align-items: center; gap: 10px;
+      font-size: 14px; font-weight: 600; color: var(--text);
+      background: linear-gradient(90deg, var(--panel-2) 0%, var(--panel) 100%);
+      user-select: none;
+    }
+    details.ops-section > summary::-webkit-details-marker { display: none; }
+    details.ops-section > summary::before {
+      content: "▸"; color: var(--muted); font-size: 11px;
+      transition: transform .15s ease; display: inline-block; width: 12px;
+    }
+    details.ops-section[open] > summary::before { transform: rotate(90deg); }
+    details.ops-section > summary .count {
+      margin-left: auto; color: var(--muted); font-size: 11px;
+      text-transform: uppercase; letter-spacing: .04em; font-weight: 500;
+    }
+    details.ops-section > .ops-body { padding: 4px 16px 14px; }
+    details.ops-section > .ops-body .section-title { display: none; }
+    details.ops-section.ops-quality { border-left-color: var(--td-orange); }
+    details.ops-section.ops-quality > summary { box-shadow: inset 4px 0 0 var(--td-orange); }
+    details.ops-section.ops-lineage { border-left-color: var(--td-blue); }
+    details.ops-section.ops-lineage > summary { box-shadow: inset 4px 0 0 var(--td-blue); }
+    details.ops-section.ops-change  { border-left-color: var(--td-navy); }
+    details.ops-section.ops-change  > summary { box-shadow: inset 4px 0 0 var(--td-navy); }
+    details.ops-section.ops-agent   { border-left-color: var(--td-teal); }
+    details.ops-section.ops-agent   > summary { box-shadow: inset 4px 0 0 var(--td-teal); }
     .charts-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 8px; }
     .chart-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
     .chart-title { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
@@ -127,8 +165,45 @@
     .erd-legend { fill: var(--muted); font-size: 11px; }
     .cookbook-search { width: 100%; max-width: 420px; margin-bottom: 16px; background: var(--panel-2);
       color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; }
-    .recipe { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
-    .recipe h4 { margin: 0 0 6px; font-size: 15px; }
+    .recipe {
+      background: linear-gradient(180deg, #1f2a36 0%, var(--panel) 100%);
+      border: 1px solid var(--border); border-left: 4px solid var(--td-orange);
+      border-radius: 10px; padding: 18px 20px; margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    }
+    .recipe.is-batch { border-left-color: var(--td-blue); }
+    .recipe h4 {
+      margin: 0 0 8px; font-size: 18px; font-weight: 700;
+      color: #ffd9b3; letter-spacing: .01em;
+    }
+    .recipe .business-q {
+      font-size: 14.5px; color: var(--text); margin: 0 0 8px; line-height: 1.55;
+    }
+    .recipe .use-case {
+      font-size: 14px; color: #e6edf3; margin: 0 0 10px;
+    }
+    .recipe .use-case strong { color: var(--td-teal); font-weight: 700; }
+    .recipe .params-note { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+    .recipe .params-note strong { color: var(--td-orange); font-weight: 700; }
+    .recipe .perf-note { font-size: 12.5px; color: #f0d9a8; margin-top: 6px; }
+    .pill.mode-interactive {
+      background: rgba(0,181,226,.18); color: var(--td-blue);
+      border-color: var(--td-blue); font-weight: 700;
+    }
+    .pill.mode-batch {
+      background: rgba(243,108,33,.18); color: var(--td-orange);
+      border-color: var(--td-orange); font-weight: 700;
+    }
+    .cookbook-toolbar {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px;
+    }
+    .mode-filter { display: inline-flex; gap: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .mode-filter button {
+      background: var(--panel-2); color: var(--muted); border: 0; padding: 7px 14px;
+      font-size: 12px; font-weight: 600; cursor: pointer; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .mode-filter button:hover { color: var(--text); }
+    .mode-filter button.active { background: var(--td-orange); color: #1a1a1a; }
     .code-head { display: flex; justify-content: space-between; align-items: center; margin: 10px 0 0; }
     .recipe-id { color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; }
     .copy-btn { background: var(--panel-2); color: var(--accent); border: 1px solid var(--border);
