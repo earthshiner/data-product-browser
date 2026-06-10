@@ -242,14 +242,24 @@ function _entityNameVariants(entity) {
   return out;
 }
 
+// Accept either a bare table name or a qualified "<database>.<table>" value —
+// curated metadata sometimes drifts between the two.
+function _qualifiedMatches(value, variants) {
+  if (!value) return false;
+  const v = value.toLowerCase();
+  if (variants.has(v)) return true;
+  const dot = v.lastIndexOf(".");
+  return dot >= 0 && variants.has(v.slice(dot + 1));
+}
+
 function glossaryFor(entity) {
   const variants = _entityNameVariants(entity);
-  return state.data.glossary.filter((g) => variants.has((g.related_table || "").toLowerCase()));
+  return state.data.glossary.filter((g) => _qualifiedMatches(g.related_table, variants));
 }
 
 function decisionsFor(entity) {
   const variants = _entityNameVariants(entity);
-  return state.data.decisions.filter((d) => variants.has((d.affects_table || "").toLowerCase()));
+  return state.data.decisions.filter((d) => _qualifiedMatches(d.affects_table, variants));
 }
 
 // Views exposing this entity's base table (1:M), primary first.
