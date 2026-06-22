@@ -87,6 +87,42 @@ def _password_help() -> str:
     )
 
 
+def _login_help() -> str:
+    """Guidance shown when Teradata rejects the credentials (how to set user + password)."""
+    return (
+        "Login failed — the Teradata UserId, Password or Account is invalid.\n\n"
+        "  Check the username (from --td-user or TD_USER):\n\n"
+        "    • Command-line option:   --td-user your-username\n"
+        "    • Environment variable:  TD_USER=your-username\n\n"
+        "  Set or update the password:\n\n"
+        "    • Store it once (recommended):  data-product-browser store-password\n"
+        f"    • Environment variable:         {_ENV_PASSWORD}=your-password\n"
+        "    • Command-line option:          --td-password your-password\n"
+        "      (a password on the command line may be visible to other processes)"
+    )
+
+
+def _handle_connection_error(exc: Exception, host: str) -> None:
+    """Abort with friendly, actionable guidance based on the driver error."""
+    msg = str(exc)
+    low = msg.lower()
+    # 8017 / 1017 / SQLState 28000 are Teradata's invalid-credential codes.
+    if "8017" in msg or "1017" in msg or "28000" in msg or "invalid" in low:
+        _abort(_login_help())
+    if (
+        "unable to connect" in low
+        or "connection refused" in low
+        or "could not be resolved" in low
+        or "timed out" in low
+        or "10054" in msg
+    ):
+        _abort(
+            f"Cannot reach Teradata at '{host}'.\n\n"
+            f"  Check the host (--td-host or TD_HOST) is correct and reachable."
+        )
+    _abort(f"Connection failed:\n\n  {msg.splitlines()[0]}")
+
+
 def _resolve_host_user(td_host: str | None, td_user: str | None) -> tuple[str, str]:
     """Resolve Teradata host/user: explicit option > TD_HOST/TD_USER (or .env).
 
@@ -143,19 +179,7 @@ def _connect(
     try:
         return teradatasql.connect(host=host, user=user, password=password)
     except Exception as exc:
-        msg = str(exc)
-        if "8017" in msg or "1017" in msg or "invalid" in msg.lower():
-            _abort(
-                "Login failed — the username or password is incorrect.\n\n"
-                "  Re-store your password:\n\n"
-                "    data-product-browser store-password"
-            )
-        if "unable to connect" in msg.lower() or "connection refused" in msg.lower():
-            _abort(
-                f"Cannot connect to Teradata at '{host}'.\n\n"
-                f"  Check the host (--td-host or TD_HOST) is correct and reachable."
-            )
-        _abort(f"Connection failed:\n\n  {msg.splitlines()[0]}")
+        _handle_connection_error(exc, host)
 
 
 def _validate_artefact(value: str) -> None:
@@ -377,7 +401,7 @@ def serve(
     try:
         connection_factory().close()
     except Exception as exc:
-        _abort(f"Could not connect to Teradata at '{td_host}':\n\n  {str(exc).splitlines()[0]}")
+        _handle_connection_error(exc, td_host)
 
     service = DataProductService(connection_factory, registry_db=registry_db, ttl_seconds=ttl)
     typer.echo(f"\nData Product Browser → http://{host}:{port}  (Ctrl+C to stop)\n")

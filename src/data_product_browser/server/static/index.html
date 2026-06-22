@@ -227,13 +227,35 @@
     .pill.bad { color: var(--pii); border-color: var(--pii); }
     .erd-scroll { overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
     svg.erd { display: block; }
-    .erd-node { cursor: pointer; }
-    .erd-node:hover rect { filter: brightness(1.25); }
-    .erd-label { fill: var(--text); font-size: 13px; font-weight: 600; }
-    .erd-sub { fill: var(--muted); font-size: 10px; font-family: ui-monospace, Menlo, Consolas, monospace; }
     .erd-head { fill: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
-    .erd-edge { fill: none; stroke: var(--muted); stroke-width: 1.3; opacity: .55; }
     .erd-legend { fill: var(--muted); font-size: 11px; }
+    /* attribute-level boxes */
+    .erd-box { cursor: pointer; }
+    .erd-box-bg { fill: var(--panel-2); stroke: var(--border); stroke-width: 1.3; }
+    .erd-box-name { fill: var(--text); font-size: 12.5px; font-weight: 700; }
+    .erd-box-sub { fill: var(--muted); font-size: 9.5px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .erd-cn { fill: var(--text); font-size: 11.5px; }
+    .erd-cn.fk { fill: var(--accent); }
+    .erd-ct { fill: var(--muted); font-size: 9.5px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .erd-rowline { stroke: var(--border); stroke-width: 1; opacity: .5; }
+    /* edges */
+    .erd-edge { fill: none; stroke-width: 2; }
+    .erd-edge.hard { stroke: var(--td-orange); }
+    .erd-edge.soft { stroke: var(--accent); stroke-dasharray: 7 5; }
+    .erd-edge.erd-on { stroke-width: 3.2; }
+    .erd-dot.hard { fill: var(--td-orange); }
+    .erd-dot.soft { fill: var(--accent); }
+    .erd-card-bg { fill: var(--bg); opacity: .82; }
+    .erd-card { fill: var(--text); font-size: 9.5px; font-weight: 600; }
+    .erd-dimmed { opacity: .12; transition: opacity .12s; }
+    /* attribute badges */
+    .erd-badge-t { font-size: 8.5px; font-weight: 700; }
+    .erd-bg-pk { fill: var(--td-orange); }   .erd-tx-pk { fill: #1a1208; }
+    .erd-bg-fk { fill: var(--accent); }      .erd-tx-fk { fill: #0a141d; }
+    .erd-bg-pii { fill: var(--pii); }        .erd-tx-pii { fill: #1d0a08; }
+    .erd-ol-nk { fill: none; stroke: var(--accent); stroke-width: 1; }   .erd-tx-nk { fill: var(--accent); }
+    .erd-ol-sens { fill: none; stroke: var(--pii); stroke-width: 1; }    .erd-tx-sens { fill: var(--pii); }
+    .erd-ol-nn { fill: none; stroke: var(--border); stroke-width: 1; }   .erd-tx-nn { fill: var(--muted); }
     .cookbook-search { width: 100%; max-width: 420px; margin-bottom: 16px; background: var(--panel-2);
       color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; }
     details.recipe {
@@ -364,6 +386,6 @@
     <nav id="tree"></nav>
     <main id="detail"><div class="empty">Select a data product to begin.</div></main>
   </div>
-  <script src="/app.js?v=7"></script>
+  <script src="/app.js?v=8"></script>
 </body>
 </html>
