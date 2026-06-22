@@ -61,6 +61,13 @@
     }
     .tag.pii { background: rgba(255,123,114,.15); color: var(--pii); border: 1px solid var(--pii); }
     .tag.req { background: rgba(63,185,80,.12); color: var(--ok); border: 1px solid var(--ok); }
+    .tag.pk { background: rgba(243,108,33,.14); color: var(--td-orange); border: 1px solid var(--td-orange); }
+    .tag.nk { background: rgba(0,167,181,.14); color: var(--td-teal); border: 1px solid var(--td-teal); }
+    .tag.fk { background: rgba(74,168,255,.14); color: var(--accent); border: 1px solid var(--accent); }
+    .tag.sens { background: var(--pii); color: #1d0a08; border: 1px solid var(--pii); }
+    .tag.nn { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .fk-ref { margin-top: 3px; font-size: 11px; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .fk-ref code { color: var(--accent); background: none; padding: 0; }
     .desc { color: var(--muted); }
     .meta-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; margin-bottom: 18px; }
     .meta-grid dt { color: var(--muted); }
@@ -396,6 +403,6 @@
     <nav id="tree"></nav>
     <main id="detail"><div class="empty">Select a data product to begin.</div></main>
   </div>
-  <script src="/app.js?v=9"></script>
+  <script src="/app.js?v=10"></script>
 </body>
 </html>

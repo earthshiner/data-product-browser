@@ -309,6 +309,7 @@ function renderEntity(entity) {
       <dt>Object</dt><dd><code>${esc(entity.database_name)}.${esc(entity.table_name)}</code></dd>
       <dt>Module</dt><dd>${esc(entity.module_name)}</dd>
       <dt>View</dt><dd>${entity.view_name ? `<code>${esc(entity.view_name)}</code>` : "—"}</dd>
+      <dt>Surrogate key</dt><dd><code>${esc(entity.surrogate_key_column) || "—"}</code></dd>
       <dt>Natural key</dt><dd><code>${esc(entity.natural_key_column) || "—"}</code></dd>
       <dt>Temporal pattern</dt><dd>${esc(entity.temporal_pattern) || "—"}</dd>
       <dt>Industry standard</dt><dd>${esc(entity.industry_standard) || "—"}</dd>
@@ -359,14 +360,25 @@ function viewsHTML(entity) {
 }
 
 function schemaHTML(entity) {
+  const { sk, nk, fkCols, fkTargets } = entityKeyInfo(entity);
   const rows = columnsFor(entity)
     .map((c) => {
+      const up = (c.column_name || "").toUpperCase();
       const tags =
-        (c.is_pii ? '<span class="tag pii">PII</span>' : "") +
-        (c.is_sensitive ? '<span class="tag pii">SENSITIVE</span>' : "") +
-        (c.is_required ? '<span class="tag req">REQUIRED</span>' : "");
+        (sk && up === sk ? '<span class="tag pk" title="Primary / surrogate key">PK</span>' : "") +
+        (nk && up === nk ? '<span class="tag nk" title="Natural / business key">NK</span>' : "") +
+        (fkCols.has(up) ? '<span class="tag fk" title="Foreign key">FK</span>' : "") +
+        (c.is_pii ? '<span class="tag pii" title="Personally identifiable information">PII</span>' : "") +
+        (c.is_sensitive ? '<span class="tag sens" title="Sensitive (security-controlled)">SENS</span>' : "") +
+        (c.is_required ? '<span class="tag nn" title="NOT NULL (required)">NN</span>' : "");
+      const fkNote = fkCols.has(up)
+        ? `<div class="fk-ref">${fkTargets
+            .get(up)
+            .map((t) => `→ <code>${esc(t.table)}.${esc(t.col)}</code>`)
+            .join(", ")}</div>`
+        : "";
       return `<tr>
-        <td class="col-name">${esc(c.column_name)}${tags}</td>
+        <td class="col-name">${esc(c.column_name)}${tags}${fkNote}</td>
         <td><code>${esc(c.data_type) || "—"}</code></td>
         <td class="desc">${esc(c.business_description) || ""}</td>
         <td class="desc">${esc(c.data_classification) || ""}</td>
@@ -402,6 +414,7 @@ function schemaHTML(entity) {
       <tbody>${rows || '<tr><td colspan="4" class="desc">No column metadata.</td></tr>'}</tbody>
     </table>`;
 }
+
 
 function relationshipsHTML(entity) {
   const rels = relationshipsFor(entity);
@@ -842,18 +855,35 @@ const erdColW = ERD_BOX_W + ERD_COL_GAP;
 
 // Resolve per-column attribute flags from entity + relationship metadata.
 // PI and identity are intentionally omitted — the browser does not collect them.
-function erdColumns(n) {
-  const e = n.e;
-  const sk = (e.surrogate_key_column || "").toUpperCase();
-  const nk = (e.natural_key_column || "").toUpperCase();
+// Shared attribute-level key/FK resolution (used by both the Schema tab and the
+// Entity map, so the two can never drift). Returns the surrogate/natural key
+// column names plus the set of FK source columns and their targets.
+function entityKeyInfo(entity) {
+  const sk = (entity.surrogate_key_column || "").toUpperCase();
+  const nk = (entity.natural_key_column || "").toUpperCase();
+  const key = erdKey(entity.database_name, entity.table_name);
   const fkCols = new Set();
-  for (const r of state.data.relationships) {
+  const fkTargets = new Map(); // UPPER(col) -> [{ db, table, col, r }]
+  for (const r of state.data.relationships || []) {
     if (r.is_active === 0) continue;
-    if (erdKey(r.source_database, r.source_table) === n.key) {
-      fkCols.add((r.source_column || "").toUpperCase());
+    if (erdKey(r.source_database, r.source_table) === key) {
+      const up = (r.source_column || "").toUpperCase();
+      fkCols.add(up);
+      if (!fkTargets.has(up)) fkTargets.set(up, []);
+      fkTargets.get(up).push({
+        db: r.target_database,
+        table: r.target_table,
+        col: r.target_column,
+        r,
+      });
     }
   }
-  return columnsFor(e).map((c) => {
+  return { sk, nk, fkCols, fkTargets };
+}
+
+function erdColumns(n) {
+  const { sk, nk, fkCols } = entityKeyInfo(n.e);
+  return columnsFor(n.e).map((c) => {
     const up = (c.column_name || "").toUpperCase();
     return {
       name: c.column_name,
