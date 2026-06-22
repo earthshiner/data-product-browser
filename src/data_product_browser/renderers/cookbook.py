@@ -32,7 +32,7 @@ def _extract_table_names(sql: str, product_name: str) -> list[str]:
     return seen
 
 
-def _build_context(dp: DataProduct) -> dict:
+def _build_context(dp: DataProduct, theme: str = "light") -> dict:
     """Transform the DataProduct into template-friendly dicts."""
 
     # Group columns by database.table for the Data Dictionary tab
@@ -67,6 +67,7 @@ def _build_context(dp: DataProduct) -> dict:
                     dp.columns,
                     dp.relationships,
                     dp.entities,
+                    theme=theme,
                 ),
                 "jupyter_code": make_python_code(r),
                 "notebook_uri": notebook_data_uri(r, dp.product_name),
@@ -108,12 +109,16 @@ def _build_context(dp: DataProduct) -> dict:
     }
 
 
-def render_cookbook(dp: DataProduct) -> str:
-    """Return the complete Cookbook HTML string for the given DataProduct."""
+def render_cookbook(dp: DataProduct, theme: str = "light") -> str:
+    """Return the complete Cookbook HTML string for the given DataProduct.
+
+    ``theme`` selects the embedded column-ERD palette: ``light`` (default,
+    matches the Cookbook page), ``navy`` or ``black``.
+    """
     env = Environment(
         loader=FileSystemLoader(str(_TEMPLATES_DIR)),
         autoescape=False,
     )
     env.filters["highlight_sql"] = highlight_sql
     template = env.get_template("cookbook.html.j2")
-    return template.render(**_build_context(dp))
+    return template.render(**_build_context(dp, theme=theme))
