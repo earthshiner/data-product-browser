@@ -7,16 +7,28 @@ Usage:
     data-product-browser dump    MortgagePlatform --output ./output/data.json
     data-product-browser render  ./output/data.json  --output ./output
 
+Teradata connection — every command that touches Teradata accepts the host and
+user either as a command-line option or an environment variable (a .env file in
+the working directory is loaded automatically):
+
+    host      --td-host         or  TD_HOST
+    user      --td-user         or  TD_USER
+    password  --td-password     or  TD_PASSWORD   (see resolution order below)
+
+Note: `serve --host` is the WEB bind address; the Teradata host is `--td-host`.
+
 Password resolution order:
-    1. TD_PASSWORD environment variable (session-only, never written to disk)
-    2. System keyring  (stored via `data-product-browser store-password`)
-    3. Interactive prompt (masked, not echoed)
+    1. --td-password command-line option (may be visible to other processes)
+    2. TD_PASSWORD environment variable (session-only, never written to disk)
+    3. System keyring  (stored via `data-product-browser store-password`)
+    4. Interactive prompt (masked, not echoed)
 """
 
 from __future__ import annotations
 
 import getpass
 import os
+import sys
 from pathlib import Path
 
 import typer
@@ -36,6 +48,11 @@ from .renderers.ops_dashboard import render_ops_dashboard
 _KEYRING_SERVICE = "data-product-browser"
 _VALID_ARTEFACTS = ("all", "cookbook", "ops")
 
+# Teradata connection environment variables (single source of truth).
+_ENV_HOST = "TD_HOST"
+_ENV_USER = "TD_USER"
+_ENV_PASSWORD = "TD_PASSWORD"
+
 app = typer.Typer(
     help="Generate AI-Native Data Product artefacts from Teradata metadata.",
     add_completion=False,
@@ -48,9 +65,49 @@ def _abort(message: str) -> None:
     raise typer.Exit(1)
 
 
-def _get_password(host: str, user: str) -> str:
-    """Resolve password without ever reading from a file."""
-    pwd = os.environ.get("TD_PASSWORD")
+def _credential_help(label: str, env_var: str, cli_option: str, example: str) -> str:
+    """A consistent 'how to provide this' message listing both an arg and env var."""
+    return (
+        f"No Teradata {label} specified.\n\n"
+        f"  Provide it in either of these ways:\n\n"
+        f"    • Command-line option:   {cli_option} {example}\n"
+        f"    • Environment variable:  {env_var}={example}\n"
+        f"      (a '{env_var}={example}' line in a .env file in the current directory works too)"
+    )
+
+
+def _password_help() -> str:
+    return (
+        "No Teradata password available, and there is no terminal to prompt on.\n\n"
+        "  Provide it in one of these ways:\n\n"
+        "    • Store it once (recommended):  data-product-browser store-password\n"
+        f"    • Environment variable:         {_ENV_PASSWORD}=your-password\n"
+        "    • Command-line option:          --td-password your-password\n"
+        "      (a password on the command line may be visible to other processes)"
+    )
+
+
+def _resolve_host_user(td_host: str | None, td_user: str | None) -> tuple[str, str]:
+    """Resolve Teradata host/user: explicit option > TD_HOST/TD_USER (or .env).
+
+    Aborts with actionable guidance (CLI option *and* env var) if either is absent.
+    """
+    load_dotenv(override=True)
+    host = td_host or os.environ.get(_ENV_HOST)
+    user = td_user or os.environ.get(_ENV_USER)
+    if not host:
+        _abort(_credential_help("host", _ENV_HOST, "--td-host", "your-teradata-host"))
+    if not user:
+        _abort(_credential_help("username", _ENV_USER, "--td-user", "your-username"))
+    return host, user
+
+
+def _get_password(host: str, user: str, explicit: str | None = None) -> str:
+    """Resolve password: explicit option > TD_PASSWORD > keyring > interactive prompt."""
+    if explicit:
+        return explicit
+
+    pwd = os.environ.get(_ENV_PASSWORD)
     if pwd:
         return pwd
 
@@ -63,25 +120,25 @@ def _get_password(host: str, user: str) -> str:
     except Exception:
         pass
 
+    # Nothing stored or supplied — we can only prompt interactively. With no TTY
+    # (e.g. a service tab piping output), fail fast with guidance instead of
+    # raising an opaque error or blocking forever.
+    if not sys.stdin.isatty():
+        _abort(_password_help())
+
     return getpass.getpass(f"Teradata password for {user}@{host}: ")
 
 
-def _connect():
+def _connect(
+    td_host: str | None = None,
+    td_user: str | None = None,
+    td_password: str | None = None,
+):
     """Return an open teradatasql connection with friendly error handling."""
+    host, user = _resolve_host_user(td_host, td_user)
+    password = _get_password(host, user, td_password)
+
     import teradatasql
-
-    load_dotenv(override=True)
-    host = os.environ.get("TD_HOST")
-    user = os.environ.get("TD_USER")
-
-    if not host:
-        _abort(
-            "TD_HOST is not set.\n\n  Add it to your .env file:\n\n    TD_HOST=your-teradata-host"
-        )
-    if not user:
-        _abort("TD_USER is not set.\n\n  Add it to your .env file:\n\n    TD_USER=your-username")
-
-    password = _get_password(host, user)
 
     try:
         return teradatasql.connect(host=host, user=user, password=password)
@@ -96,7 +153,7 @@ def _connect():
         if "unable to connect" in msg.lower() or "connection refused" in msg.lower():
             _abort(
                 f"Cannot connect to Teradata at '{host}'.\n\n"
-                f"  Check that TD_HOST in your .env is correct and the host is reachable."
+                f"  Check the host (--td-host or TD_HOST) is correct and reachable."
             )
         _abort(f"Connection failed:\n\n  {msg.splitlines()[0]}")
 
@@ -142,6 +199,12 @@ def generate(
         "all", "--artefact", "-a", help="Which artefact(s): all | cookbook | ops"
     ),
     lookback: int = typer.Option(90, "--lookback", help="Observability lookback in days"),
+    td_host: str = typer.Option(None, "--td-host", help="Teradata host (overrides TD_HOST)"),
+    td_user: str = typer.Option(None, "--td-user", help="Teradata username (overrides TD_USER)"),
+    td_password: str = typer.Option(
+        None, "--td-password",
+        help="Teradata password (overrides TD_PASSWORD; may be visible to other processes)",
+    ),
 ):
     """Extract metadata from Teradata and render HTML artefacts."""
     _validate_artefact(artefact)
@@ -152,7 +215,7 @@ def generate(
         _abort(f"Cannot create output directory '{output}':\n\n  {exc}")
 
     typer.echo(f"\ndata-product-browser {__version__} — connecting to Teradata…")
-    conn = _connect()
+    conn = _connect(td_host, td_user, td_password)
 
     try:
         typer.echo(f"Collecting metadata for '{product}'…")
@@ -196,10 +259,16 @@ def dump(
         Path("data.json"), "--output", "-o", help="Path to write JSON snapshot"
     ),
     lookback: int = typer.Option(90, "--lookback", help="Observability lookback in days"),
+    td_host: str = typer.Option(None, "--td-host", help="Teradata host (overrides TD_HOST)"),
+    td_user: str = typer.Option(None, "--td-user", help="Teradata username (overrides TD_USER)"),
+    td_password: str = typer.Option(
+        None, "--td-password",
+        help="Teradata password (overrides TD_PASSWORD; may be visible to other processes)",
+    ),
 ):
     """Dump the raw DataProduct snapshot to JSON (useful for offline rendering/debugging)."""
     typer.echo("\nConnecting to Teradata…")
-    conn = _connect()
+    conn = _connect(td_host, td_user, td_password)
 
     try:
         typer.echo(f"Collecting metadata for '{product}'…")
@@ -273,29 +342,31 @@ def serve(
     registry_db: str = typer.Option(
         None, "--registry-db", help="Governance registry database (overrides TDP_REGISTRY_DB)"
     ),
+    td_host: str = typer.Option(None, "--td-host", help="Teradata host (overrides TD_HOST)"),
+    td_user: str = typer.Option(None, "--td-user", help="Teradata username (overrides TD_USER)"),
+    td_password: str = typer.Option(
+        None, "--td-password",
+        help="Teradata password (overrides TD_PASSWORD; may be visible to other processes)",
+    ),
 ):
     """Run the interactive Data Product Browser web server.
 
     Resolves Teradata credentials once at startup, then serves a browsable UI
     that reads metadata live (cached) on each request. No AI client required.
+
+    Note: --host/--port bind the web server; the Teradata connection is set with
+    --td-host/--td-user/--td-password (or TD_HOST/TD_USER/TD_PASSWORD).
     """
+    # Resolve credentials first so a missing host/user fails fast with clear
+    # guidance, before importing the database driver or web server.
+    td_host, td_user = _resolve_host_user(td_host, td_user)
+    password = _get_password(td_host, td_user, td_password)
+
     import teradatasql
     import uvicorn
 
     from .server.app import create_app
     from .server.service import DataProductService
-
-    load_dotenv(override=True)
-    td_host = os.environ.get("TD_HOST")
-    td_user = os.environ.get("TD_USER")
-    if not td_host:
-        _abort(
-            "TD_HOST is not set.\n\n  Add it to your .env file:\n\n    TD_HOST=your-teradata-host"
-        )
-    if not td_user:
-        _abort("TD_USER is not set.\n\n  Add it to your .env file:\n\n    TD_USER=your-username")
-
-    password = _get_password(td_host, td_user)
 
     typer.echo(f"Connecting as {td_user}@{td_host} (registry: {registry_db or 'default'})…")
 
