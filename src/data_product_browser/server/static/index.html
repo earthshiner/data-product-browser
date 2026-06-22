@@ -227,6 +227,16 @@
     .pill.bad { color: var(--pii); border-color: var(--pii); }
     .erd-scroll { overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
     svg.erd { display: block; }
+    .erd-toolbar { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }
+    .erd-btn { background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .erd-btn:hover { border-color: var(--accent); }
+    .erd-toolhint { color: var(--muted); font-size: 12px; }
+    .erd-toggle { cursor: pointer; }
+    .erd-toggle-bg { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
+    .erd-toggle:hover .erd-toggle-bg { stroke: var(--accent); }
+    .erd-toggle-t { fill: var(--muted); font-size: 14px; font-weight: 700; }
+    .erd-toggle:hover .erd-toggle-t { fill: var(--accent); }
     .erd-head { fill: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
     .erd-legend { fill: var(--muted); font-size: 11px; }
     /* attribute-level boxes */
@@ -386,6 +396,6 @@
     <nav id="tree"></nav>
     <main id="detail"><div class="empty">Select a data product to begin.</div></main>
   </div>
-  <script src="/app.js?v=8"></script>
+  <script src="/app.js?v=9"></script>
 </body>
 </html>
