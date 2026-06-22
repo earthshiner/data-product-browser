@@ -1,8 +1,20 @@
 """Column-level ERD SVG generator.
 
-Produces a table-per-box diagram matching the style of the existing
-MortgagePlatform_Cookbook.html: navy headers, alternating column rows,
-NOT NULL badges, PII/SENSITIVE flags, join-column connectors.
+Adopts the visual language of the ``data-model-erd`` skill — proper badge
+vocabulary (PK / NK / FK / PII / SENS / NN), key-anchored bezier connectors with
+cardinality labels, and a themeable palette (light | navy | black). Output is a
+static, self-contained inline SVG suitable for embedding once per recipe in the
+Cookbook page (no JS — the full zoom/pan/hover/drag experience belongs to a
+standalone diagram, not dozens of inline copies in a scrolling document).
+
+Badge support reflects the metadata the browser actually collects:
+  PK   surrogate_key_column (EntityMetadata)
+  NK   natural_key_column   (EntityMetadata)
+  FK   a source_column of an active TableRelationship
+  PII  ColumnMetadata.is_pii
+  SENS ColumnMetadata.is_sensitive
+  NN   ColumnMetadata.is_required
+(PI and identity are not collected by the browser, so they are not shown.)
 """
 
 from __future__ import annotations
@@ -13,33 +25,73 @@ from dataclasses import dataclass, field
 from ..models import ColumnMetadata, EntityMetadata, TableRelationship
 
 # Layout constants
-_BOX_W = 300
-_HDR_H = 28  # table header row height
+_BOX_W = 320
+_HDR_H = 40  # table header band
 _COL_H = 24  # per-column row height
-_GAP_X = 60  # horizontal gap between tables
-_TOP_Y = 40  # y offset for first table
-_LEGEND_GAP = 28  # gap below last table before legend
+_GAP_X = 168  # horizontal gap between tables (room for connectors + labels)
+_TOP_Y = 20  # y offset for first table
+_LEGEND_GAP = 30  # gap below tallest table before legend
 _FONT = "Inter, -apple-system, sans-serif"
 _MONO = "'JetBrains Mono', Menlo, monospace"
-_COLORS = ["#00233C", "#FF5F02", "#4A90E2", "#16a34a", "#7c3aed"]
+
+# ---------------------------------------------------------------------------
+# Themes — mirror the data-model-erd skill palettes (light is the default so the
+# diagram blends with the light Cookbook page).
+# ---------------------------------------------------------------------------
+_THEMES = {
+    "light": {
+        "box": "#FFFFFF", "box_stroke": "#AEC1D1", "hdr": "#EAF1F7",
+        "ename": "#00233C", "edb": "#5f7488", "row_alt": "#F7FAFC",
+        "rowdiv": "#E3EAF0", "cn": "#00233C", "cn_fk": "#2F6FBF",
+        "ct": "#5f7488", "edge_hard": "#E5550A", "edge_soft": "#2F6FBF",
+        "card_ink": "#00233C", "card_bg": "#FFFFFF", "legend": "#5f7488",
+        "pk_bg": "#FF5F02", "pk_tx": "#FFFFFF", "nk_st": "#2F6FBF", "nk_tx": "#2F6FBF",
+        "fk_bg": "#2F6FBF", "fk_tx": "#FFFFFF", "pii_bg": "#9C6FA8", "pii_tx": "#FFFFFF",
+        "sens_bg": "#D64545", "sens_tx": "#FFFFFF", "nn_st": "#AEC1D1", "nn_tx": "#5f7488",
+    },
+    "navy": {
+        "box": "#06304a", "box_stroke": "#1d6388", "hdr": "#0a3a59",
+        "ename": "#E6EEF5", "edb": "#8FB0C7", "row_alt": "#073651",
+        "rowdiv": "#0e3f5e", "cn": "#E6EEF5", "cn_fk": "#7fb4ee",
+        "ct": "#8FB0C7", "edge_hard": "#FF5F02", "edge_soft": "#4A90E2",
+        "card_ink": "#FFFFFF", "card_bg": "#001829", "legend": "#8FB0C7",
+        "pk_bg": "#FF5F02", "pk_tx": "#2a1400", "nk_st": "#4A90E2", "nk_tx": "#7fb4ee",
+        "fk_bg": "#4A90E2", "fk_tx": "#04162b", "pii_bg": "#D8BFD8", "pii_tx": "#3a2440",
+        "sens_bg": "#FF6B5B", "sens_tx": "#330d08", "nn_st": "#1d6388", "nn_tx": "#8FB0C7",
+    },
+    "black": {
+        "box": "#101013", "box_stroke": "#3b3b44", "hdr": "#17171b",
+        "ename": "#F2F4F7", "edb": "#9aa1ab", "row_alt": "#0c0c0e",
+        "rowdiv": "#222228", "cn": "#F2F4F7", "cn_fk": "#7fb4ee",
+        "ct": "#9aa1ab", "edge_hard": "#FF6A12", "edge_soft": "#4A90E2",
+        "card_ink": "#FFFFFF", "card_bg": "#000000", "legend": "#9aa1ab",
+        "pk_bg": "#FF5F02", "pk_tx": "#1a0c00", "nk_st": "#4A90E2", "nk_tx": "#7fb4ee",
+        "fk_bg": "#4A90E2", "fk_tx": "#04162b", "pii_bg": "#D8BFD8", "pii_tx": "#2a1830",
+        "sens_bg": "#FF6B5B", "sens_tx": "#2a0a06", "nn_st": "#3b3b44", "nn_tx": "#9aa1ab",
+    },
+}
 
 
 @dataclass
 class _ColRow:
     name: str
     data_type: str
-    is_required: bool
-    is_pii: bool
-    is_sensitive: bool
-    is_join: bool
-    is_key: bool
+    pk: bool
+    nk: bool
+    fk: bool
+    pii: bool
+    sens: bool
+    nn: bool
+
+    @property
+    def is_key(self) -> bool:
+        return self.pk or self.nk
 
 
 @dataclass
 class _Table:
     short_name: str
     full_name: str
-    color: str
     cols: list[_ColRow] = field(default_factory=list)
 
     @property
@@ -64,136 +116,123 @@ def _build_tables(
     relationships: list[TableRelationship],
     entities: list[EntityMetadata],
 ) -> list[_Table]:
-    # All lookups are case-insensitive — Teradata returns names in varying case
-    join_cols: dict[str, set[str]] = {}
+    # Case-insensitive lookups — Teradata returns names in varying case.
+    fk_source: dict[str, set[str]] = {}
     for r in relationships:
         if r.is_active:
-            join_cols.setdefault(r.source_table.upper(), set()).add(r.source_column.upper())
-            join_cols.setdefault(r.target_table.upper(), set()).add(r.target_column.upper())
+            fk_source.setdefault(r.source_table.upper(), set()).add(r.source_column.upper())
 
-    natural_keys: dict[str, set[str]] = {}
+    natural_keys: dict[str, str] = {}
+    surrogate_keys: dict[str, str] = {}
     for e in entities:
         if e.natural_key_column:
-            natural_keys.setdefault(e.table_name.upper(), set()).add(e.natural_key_column.upper())
+            natural_keys[e.table_name.upper()] = e.natural_key_column.upper()
+        if e.surrogate_key_column:
+            surrogate_keys[e.table_name.upper()] = e.surrogate_key_column.upper()
 
-    tables = []
-    for i, tname in enumerate(table_names):
+    tables: list[_Table] = []
+    for tname in table_names:
         short = _short(tname)
-        cols_for = [c for c in columns if c.table_name.upper() == short.upper()]
+        key = short.upper()
+        cols_for = [c for c in columns if c.table_name.upper() == key]
         if not cols_for:
             continue
+
+        nk_col = natural_keys.get(key)
+        pk_col = surrogate_keys.get(key)
+        fk_cols = fk_source.get(key, set())
 
         rows = [
             _ColRow(
                 name=c.column_name,
                 data_type=c.data_type or "",
-                is_required=bool(c.is_required),
-                is_pii=bool(c.is_pii),
-                is_sensitive=bool(c.is_sensitive),
-                is_join=c.column_name.upper() in join_cols.get(short.upper(), set()),
-                is_key=c.column_name.upper() in natural_keys.get(short.upper(), set()),
+                pk=(pk_col is not None and c.column_name.upper() == pk_col),
+                nk=(nk_col is not None and c.column_name.upper() == nk_col),
+                fk=c.column_name.upper() in fk_cols,
+                pii=bool(c.is_pii),
+                sens=bool(c.is_sensitive),
+                nn=bool(c.is_required),
             )
             for c in cols_for
         ]
-
-        tables.append(
-            _Table(
-                short_name=short,
-                full_name=tname,
-                color=_COLORS[i % len(_COLORS)],
-                cols=rows,
-            )
-        )
+        tables.append(_Table(short_name=short, full_name=tname, cols=rows))
 
     return tables
 
 
-def _render_table(t: _Table, x: int, y: int, parts: list[str]) -> None:
+def _badge(parts: list[str], x: int, y: int, label: str, fill: str | None,
+           stroke: str | None, text: str, pal: dict) -> int:
+    """Draw one badge chip at (x,y); return its width incl. trailing gap."""
+    w = len(label) * 6.4 + 8
+    if fill:
+        parts.append(f'<rect x="{x}" y="{y}" width="{w:.0f}" height="15" rx="4" fill="{fill}"/>')
+    else:
+        parts.append(f'<rect x="{x}" y="{y}" width="{w:.0f}" height="15" rx="4" '
+                     f'fill="none" stroke="{stroke}" stroke-width="1"/>')
+    parts.append(f'<text x="{x + w / 2:.0f}" y="{y + 11}" font-family="{_FONT}" font-size="9.5" '
+                 f'font-weight="700" fill="{text}" text-anchor="middle">{label}</text>')
+    return int(w) + 4
+
+
+def _render_table(t: _Table, x: int, y: int, parts: list[str], pal: dict) -> None:
     h = t.box_h
     esc = html.escape
 
-    # Outer box
     parts.append(
-        f'<rect x="{x}" y="{y}" width="{_BOX_W}" height="{h}" rx="4" '
-        f'fill="#FFFFFF" stroke="#e2e4e8" stroke-width="1"/>'
+        f'<rect x="{x}" y="{y}" width="{_BOX_W}" height="{h}" rx="9" '
+        f'fill="{pal["box"]}" stroke="{pal["box_stroke"]}" stroke-width="1.4"/>'
     )
-    # Header
+    # Header band (rounded top via path)
     parts.append(
-        f'<rect x="{x}" y="{y}" width="{_BOX_W}" height="{_HDR_H}" rx="4" fill="{t.color}"/>'
-        f'<rect x="{x}" y="{y + _HDR_H - 4}" width="{_BOX_W}" height="4" fill="{t.color}"/>'
+        f'<path d="M{x} {y + 9} a9 9 0 0 1 9 -9 h{_BOX_W - 18} a9 9 0 0 1 9 9 '
+        f'v{_HDR_H - 9} h-{_BOX_W} z" fill="{pal["hdr"]}"/>'
     )
     parts.append(
-        f'<text x="{x + 10}" y="{y + 18}" font-family="{_FONT}" font-size="11" '
-        f'font-weight="600" fill="#FFFFFF">{esc(t.short_name)}</text>'
+        f'<text x="{x + 12}" y="{y + 18}" font-family="{_FONT}" font-size="13" '
+        f'font-weight="700" fill="{pal["ename"]}">{esc(t.short_name)}</text>'
+    )
+    parts.append(
+        f'<text x="{x + 12}" y="{y + 32}" font-family="{_FONT}" font-size="9.5" '
+        f'fill="{pal["edb"]}">entity</text>'
     )
 
-    # Column rows
     for idx, col in enumerate(t.cols):
         ry = y + _HDR_H + idx * _COL_H
-        bg = "#f7f8fa" if idx % 2 == 0 else "#FFFFFF"
-        cy = ry + _COL_H // 2 + 4  # text baseline
+        cy = ry + _COL_H // 2 + 4
+        if idx % 2 == 0:
+            parts.append(f'<rect x="{x + 1}" y="{ry}" width="{_BOX_W - 2}" height="{_COL_H}" '
+                         f'fill="{pal["row_alt"]}" opacity="0.5"/>')
+        if idx > 0:
+            parts.append(f'<line x1="{x + 10}" y1="{ry}" x2="{x + _BOX_W - 10}" y2="{ry}" '
+                         f'stroke="{pal["rowdiv"]}" stroke-width="1"/>')
 
-        parts.append(f'<rect x="{x}" y="{ry}" width="{_BOX_W}" height="{_COL_H}" fill="{bg}"/>')
-
-        # PK/FK badge (text rect, no emoji — reliable across all browsers/SVG renderers)
-        badge_x = x + 6
-        name_x = x + 10
-        if col.is_key:
-            parts.append(
-                f'<rect x="{badge_x}" y="{ry + 5}" width="16" height="13" rx="2" fill="#0d9488"/>'
-                f'<text x="{badge_x + 8}" y="{ry + 15}" font-family="{_FONT}" font-size="7" '
-                f'font-weight="700" fill="#FFFFFF" text-anchor="middle">PK</text>'
-            )
-            name_x = badge_x + 20
-        elif col.is_join:
-            parts.append(
-                f'<rect x="{badge_x}" y="{ry + 5}" width="16" height="13" rx="2" fill="#FF5F02"/>'
-                f'<text x="{badge_x + 8}" y="{ry + 15}" font-family="{_FONT}" font-size="7" '
-                f'font-weight="700" fill="#FFFFFF" text-anchor="middle">FK</text>'
-            )
-            name_x = badge_x + 20
-
-        name_color = "#FF5F02" if col.is_join else "#00233C"
+        cn_col = pal["cn_fk"] if col.fk else pal["cn"]
+        weight = "600" if col.is_key else "400"
         parts.append(
-            f'<text x="{name_x}" y="{cy}" font-family="{_FONT}" font-size="10" '
-            f'fill="{name_color}">{esc(col.name)}</text>'
+            f'<text x="{x + 12}" y="{cy}" font-family="{_FONT}" font-size="12" '
+            f'font-weight="{weight}" fill="{cn_col}">{esc(col.name)}</text>'
         )
 
-        # Data type (right-aligned, monospace)
-        type_x = x + _BOX_W - 4
+        # Badges, right-aligned (skill order: PK NK FK PII SENS NN)
+        chips = []
+        if col.pk:   chips.append(("PK", pal["pk_bg"], None, pal["pk_tx"]))
+        if col.nk:   chips.append(("NK", None, pal["nk_st"], pal["nk_tx"]))
+        if col.fk:   chips.append(("FK", pal["fk_bg"], None, pal["fk_tx"]))
+        if col.pii:  chips.append(("PII", pal["pii_bg"], None, pal["pii_tx"]))
+        if col.sens: chips.append(("SENS", pal["sens_bg"], None, pal["sens_tx"]))
+        if col.nn:   chips.append(("NN", None, pal["nn_st"], pal["nn_tx"]))
+
+        widths = [int(len(lbl) * 6.4 + 8) + 4 for lbl, *_ in chips]
+        bx = x + _BOX_W - 12 - sum(widths)
+        type_right = bx - 6
+        for (lbl, fill, stroke, txc), w in zip(chips, widths):
+            _badge(parts, bx, ry + 4, lbl, fill, stroke, txc, pal)
+            bx += w
+
         parts.append(
-            f'<text x="{type_x}" y="{cy}" font-family="{_MONO}" font-size="9" '
-            f'fill="#FF5F02" text-anchor="end">{esc(col.data_type)}</text>'
+            f'<text x="{type_right}" y="{cy}" font-family="{_MONO}" font-size="9.5" '
+            f'fill="{pal["ct"]}" text-anchor="end">{esc(col.data_type)}</text>'
         )
-
-        # Attribute badges — stack left of the data type
-        bx = x + 160
-        if col.is_required:
-            parts.append(
-                f'<rect x="{bx}" y="{ry + 5}" width="18" height="13" rx="3" fill="#6b7280"/>'
-                f'<text x="{bx + 9}" y="{ry + 15}" font-family="{_FONT}" font-size="8" '
-                f'font-weight="700" fill="#FFFFFF" text-anchor="middle">NN</text>'
-            )
-            bx += 22
-        if col.is_pii:
-            parts.append(
-                f'<rect x="{bx}" y="{ry + 5}" width="22" height="13" rx="3" fill="#dc2626"/>'
-                f'<text x="{bx + 11}" y="{ry + 15}" font-family="{_FONT}" font-size="8" '
-                f'font-weight="700" fill="#FFFFFF" text-anchor="middle">PII</text>'
-            )
-            bx += 26
-        if col.is_sensitive:
-            parts.append(
-                f'<rect x="{bx}" y="{ry + 5}" width="30" height="13" rx="3" fill="#d97706"/>'
-                f'<text x="{bx + 15}" y="{ry + 15}" font-family="{_FONT}" font-size="8" '
-                f'font-weight="700" fill="#FFFFFF" text-anchor="middle">SENS</text>'
-            )
-
-    # Bottom separator
-    parts.append(
-        f'<line x1="{x}" y1="{y + h}" x2="{x + _BOX_W}" y2="{y + h}" '
-        f'stroke="#e2e4e8" stroke-width="0.5"/>'
-    )
 
 
 def _render_connectors(
@@ -201,104 +240,109 @@ def _render_connectors(
     xs: list[int],
     relationships: list[TableRelationship],
     parts: list[str],
-) -> None:
-    # Case-insensitive lookup so Teradata mixed-case names always match
+    pal: dict,
+) -> list[dict]:
+    """Draw connector lines + endpoint dots (beneath the boxes).
+
+    Returns a list of label specs to be drawn *on top* of the boxes afterwards,
+    so cardinality pills are never clipped under an adjacent table.
+    """
     table_index = {t.short_name.upper(): i for i, t in enumerate(tables)}
     drawn: set[tuple] = set()
+    labels: list[dict] = []
 
     for r in relationships:
         if not r.is_active:
             continue
-        ai = table_index.get(r.source_table.upper())
-        bi = table_index.get(r.target_table.upper())
-        if ai is None or bi is None or ai == bi:
+        si = table_index.get(r.source_table.upper())
+        ti = table_index.get(r.target_table.upper())
+        if si is None or ti is None or si == ti:
             continue
-
-        # Deduplicate — one edge per table pair
-        edge_key = (min(ai, bi), max(ai, bi))
+        edge_key = (min(si, ti), max(si, ti), r.source_column.upper(), r.target_column.upper())
         if edge_key in drawn:
             continue
         drawn.add(edge_key)
 
-        # Always draw left-to-right regardless of relationship direction
-        if ai <= bi:
-            li, ri = ai, bi
-            from_col, to_col = r.source_column, r.target_column
-        else:
-            li, ri = bi, ai
-            from_col, to_col = r.target_column, r.source_column
-
-        lt = tables[li]
-        rt = tables[ri]
-
-        ly = lt.col_y_centre(from_col, _TOP_Y)
-        ry_val = rt.col_y_centre(to_col, _TOP_Y)
-        if ly is None or ry_val is None:
+        st, tt = tables[si], tables[ti]
+        sy = st.col_y_centre(r.source_column, _TOP_Y)
+        ty = tt.col_y_centre(r.target_column, _TOP_Y)
+        if sy is None or ty is None:
             continue
 
-        x1 = xs[li] + _BOX_W
-        x2 = xs[ri]
-        # Optional relationships render dashed (join_type was removed from the standard).
-        dashed = "" if r.is_mandatory else ' stroke-dasharray="6,4"'
-        parts.append(
-            f'<line x1="{x1}" y1="{ly}" x2="{x2}" y2="{ry_val}" '
-            f'stroke="#FF5F02" stroke-width="1.5" marker-end="url(#erd-arrow)"{dashed}/>'
-        )
+        s_left = xs[si] > xs[ti]
+        sx = xs[si] if s_left else xs[si] + _BOX_W
+        tx = xs[ti] + _BOX_W if s_left else xs[ti]
+        dx = max(60, abs(tx - sx) * 0.45) * (-1 if s_left else 1)
+        path = f"M {sx} {sy} C {sx + dx:.0f} {sy}, {tx - dx:.0f} {ty}, {tx} {ty}"
+
+        is_hard = (r.relationship_type or "").upper() == "FK" or bool(r.is_mandatory)
+        colour = pal["edge_hard"] if is_hard else pal["edge_soft"]
+        dash = "" if is_hard else ' stroke-dasharray="7,5"'
+        parts.append(f'<path d="{path}" fill="none" stroke="{colour}" stroke-width="2.3"{dash}/>')
+        parts.append(f'<circle cx="{sx}" cy="{sy}" r="3.2" fill="{colour}"/>')
+        parts.append(f'<circle cx="{tx}" cy="{ty}" r="3.2" fill="{colour}"/>')
+
+        # Build the label, clamped to the available inter-box gap so it never
+        # overflows under a neighbouring table.
+        gap = abs(tx - sx)
+        card = r.cardinality or ""
+        meaning = (r.relationship_meaning or "").strip()
+        label = card
+        if meaning:
+            candidate = f"{card}  \u00b7  {meaning}" if card else meaning
+            if len(candidate) * 5.4 + 10 <= gap * 0.96:
+                label = candidate
+            else:
+                # try a truncated meaning, else fall back to cardinality only
+                room = int((gap * 0.96 - 10) / 5.4) - (len(card) + 5)
+                if room >= 6:
+                    label = f"{card}  \u00b7  {meaning[:room - 1]}\u2026"
+        if label:
+            labels.append({"x": (sx + tx) / 2, "y": (sy + ty) / 2, "text": label})
+
+    return labels
 
 
-def _render_legend(y: int, parts: list[str]) -> None:
-    lx = 20
-    # PK badge
-    parts.append(
-        f'<rect x="{lx}" y="{y - 10}" width="16" height="13" rx="2" fill="#0d9488"/>'
-        f'<text x="{lx + 8}" y="{y}" font-family="{_FONT}" font-size="7" '
-        f'font-weight="700" fill="#FFFFFF" text-anchor="middle">PK</text>'
-    )
-    lx += 22
-    parts.append(
-        f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">Natural key</text>'
-    )
-    lx += 76
-    # FK badge
-    parts.append(
-        f'<rect x="{lx}" y="{y - 10}" width="16" height="13" rx="2" fill="#FF5F02"/>'
-        f'<text x="{lx + 8}" y="{y}" font-family="{_FONT}" font-size="7" '
-        f'font-weight="700" fill="#FFFFFF" text-anchor="middle">FK</text>'
-    )
-    lx += 22
-    parts.append(
-        f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">Join column  ·  </text>'
-    )
-    lx += 82
-    parts.append(
-        f'<rect x="{lx}" y="{y - 10}" width="18" height="13" rx="3" fill="#6b7280"/>'
-        f'<text x="{lx + 9}" y="{y}" font-family="{_FONT}" font-size="8" '
-        f'font-weight="700" fill="#FFFFFF" text-anchor="middle">NN</text>'
-    )
-    lx += 24
-    parts.append(
-        f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">=NOT NULL  ·  </text>'
-    )
-    lx += 78
-    parts.append(
-        f'<rect x="{lx}" y="{y - 10}" width="22" height="13" rx="3" fill="#dc2626"/>'
-        f'<text x="{lx + 11}" y="{y}" font-family="{_FONT}" font-size="8" '
-        f'font-weight="700" fill="#FFFFFF" text-anchor="middle">PII</text>'
-    )
-    lx += 28
-    parts.append(
-        f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">  ·  </text>'
-    )
-    lx += 22
-    parts.append(
-        f'<rect x="{lx}" y="{y - 10}" width="30" height="13" rx="3" fill="#d97706"/>'
-        f'<text x="{lx + 15}" y="{y}" font-family="{_FONT}" font-size="8" '
-        f'font-weight="700" fill="#FFFFFF" text-anchor="middle">SENS</text>'
-    )
-    lx += 36
-    parts.append(
-        f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" fill="#6b7280">=Sensitive</text>'
-    )
+def _render_edge_labels(labels: list[dict], parts: list[str], pal: dict) -> None:
+    for lab in labels:
+        w = len(lab["text"]) * 5.4 + 10
+        mx, my = lab["x"], lab["y"]
+        parts.append(f'<rect x="{mx - w / 2:.0f}" y="{my - 9:.0f}" width="{w:.0f}" height="16" '
+                     f'rx="5" fill="{pal["card_bg"]}" opacity="0.92"/>')
+        parts.append(f'<text x="{mx:.0f}" y="{my + 3:.0f}" font-family="{_FONT}" font-size="10" '
+                     f'font-weight="600" fill="{pal["card_ink"]}" text-anchor="middle">'
+                     f'{html.escape(lab["text"])}</text>')
+
+
+def _render_legend(x0: int, y: int, parts: list[str], pal: dict) -> None:
+    lx = x0
+    items = [
+        ("PK", pal["pk_bg"], None, pal["pk_tx"], "key"),
+        ("NK", None, pal["nk_st"], pal["nk_tx"], "natural"),
+        ("FK", pal["fk_bg"], None, pal["fk_tx"], "foreign"),
+        ("PII", pal["pii_bg"], None, pal["pii_tx"], ""),
+        ("SENS", pal["sens_bg"], None, pal["sens_tx"], ""),
+        ("NN", None, pal["nn_st"], pal["nn_tx"], "not null"),
+    ]
+    for lbl, fill, stroke, txc, note in items:
+        w = _badge(parts, lx, y - 11, lbl, fill, stroke, txc, pal)
+        lx += w + 2
+        if note:
+            parts.append(f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" '
+                         f'fill="{pal["legend"]}">{note}</text>')
+            lx += len(note) * 5 + 14
+        else:
+            lx += 8
+    # Edge legend
+    parts.append(f'<line x1="{lx}" y1="{y - 4}" x2="{lx + 22}" y2="{y - 4}" '
+                 f'stroke="{pal["edge_hard"]}" stroke-width="2.3"/>')
+    parts.append(f'<text x="{lx + 27}" y="{y}" font-family="{_FONT}" font-size="9" '
+                 f'fill="{pal["legend"]}">FK</text>')
+    lx += 27 + 20
+    parts.append(f'<line x1="{lx}" y1="{y - 4}" x2="{lx + 22}" y2="{y - 4}" '
+                 f'stroke="{pal["edge_soft"]}" stroke-width="2.3" stroke-dasharray="7,5"/>')
+    parts.append(f'<text x="{lx + 27}" y="{y}" font-family="{_FONT}" font-size="9" '
+                 f'fill="{pal["legend"]}">soft</text>')
 
 
 def make_column_erd(
@@ -306,37 +350,36 @@ def make_column_erd(
     columns: list[ColumnMetadata],
     relationships: list[TableRelationship],
     entities: list[EntityMetadata],
+    theme: str = "light",
 ) -> str:
-    """Return an inline SVG column-level ERD for the given table list."""
+    """Return an inline SVG column-level ERD for the given table list.
+
+    ``theme`` is one of ``light`` (default, matches the Cookbook page), ``navy``
+    or ``black`` (mirrors the data-model-erd skill themes).
+    """
+    pal = _THEMES.get(theme, _THEMES["light"])
     built = _build_tables(tables, columns, relationships, entities)
     if not built:
         return ""
 
     n = len(built)
-    total_w = n * _BOX_W + (n - 1) * _GAP_X + 40
+    total_w = 20 + n * _BOX_W + (n - 1) * _GAP_X + 20
     max_h = max(t.box_h for t in built)
-    total_h = _TOP_Y + max_h + _LEGEND_GAP + 16
+    total_h = _TOP_Y + max_h + _LEGEND_GAP + 18
 
     xs = [20 + i * (_BOX_W + _GAP_X) for i in range(n)]
 
     parts: list[str] = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" '
-        f'width="{total_w}" height="{total_h}" '
-        f'viewBox="0 0 {total_w} {total_h}" '
-        f'style="max-width:100%;height:auto;" '
-        f'role="img" aria-label="Column ERD: {html.escape(", ".join(t.short_name for t in built))}">',
-        "<defs>",
-        '<marker id="erd-arrow" viewBox="0 0 10 10" refX="9" refY="5" '
-        'markerWidth="6" markerHeight="6" orient="auto-start-reverse">',
-        '<path d="M 0 0 L 10 5 L 0 10 z" fill="#FF5F02"/></marker>',
-        "</defs>",
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{total_w}" height="{total_h}" '
+        f'viewBox="0 0 {total_w} {total_h}" style="max-width:100%;height:auto;" role="img" '
+        f'aria-label="Column ERD: {html.escape(", ".join(t.short_name for t in built))}">',
     ]
-
+    # Connectors first so boxes sit on top (matches the skill's edge layer).
+    edge_labels = _render_connectors(built, xs, relationships, parts, pal)
     for t, x in zip(built, xs):
-        _render_table(t, x, _TOP_Y, parts)
-
-    _render_connectors(built, xs, relationships, parts)
-    _render_legend(_TOP_Y + max_h + _LEGEND_GAP, parts)
-
+        _render_table(t, x, _TOP_Y, parts, pal)
+    # Edge labels on top of the boxes so cardinality pills are never clipped.
+    _render_edge_labels(edge_labels, parts, pal)
+    _render_legend(20, _TOP_Y + max_h + _LEGEND_GAP, parts, pal)
     parts.append("</svg>")
     return "".join(parts)
