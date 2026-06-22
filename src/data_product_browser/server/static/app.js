@@ -781,27 +781,147 @@ const erdKey = (db, table) => `${db}|${(table || "").toLowerCase()}`;
 
 window.__erdSelect = (id) => selectEntity(id);
 
-const ERD_NODE_W = 180;
-const ERD_NODE_H = 38;
-const ERD_COL_GAP = 110;
-const ERD_ROW_GAP = 22;
-const ERD_PAD = 24;
-const ERD_HEAD = 34;
-const erdColW = ERD_NODE_W + ERD_COL_GAP;
-const erdRowH = ERD_NODE_H + ERD_ROW_GAP;
+// Hover highlight: emphasise a box's relationships and dim everything else.
+window.__erdHi = (key) => {
+  const svg = document.querySelector("svg.erd");
+  if (!svg) return;
+  const conn = new Set([key]);
+  svg.querySelectorAll(".erd-edge").forEach((ed) => {
+    const f = ed.getAttribute("data-from");
+    const t = ed.getAttribute("data-to");
+    if (f === key || t === key) {
+      conn.add(f);
+      conn.add(t);
+    }
+  });
+  svg.querySelectorAll(".erd-box").forEach((b) =>
+    b.classList.toggle("erd-dimmed", !conn.has(b.getAttribute("data-key"))),
+  );
+  svg.querySelectorAll(".erd-edge").forEach((ed) => {
+    const on = ed.getAttribute("data-from") === key || ed.getAttribute("data-to") === key;
+    ed.classList.toggle("erd-dimmed", !on);
+    ed.classList.toggle("erd-on", on);
+  });
+};
+window.__erdHiOff = () => {
+  const svg = document.querySelector("svg.erd");
+  if (!svg) return;
+  svg.querySelectorAll(".erd-dimmed").forEach((n) => n.classList.remove("erd-dimmed"));
+  svg.querySelectorAll(".erd-on").forEach((n) => n.classList.remove("erd-on"));
+};
 
-function erdNodeSvg(n) {
+// Attribute-level box geometry (matches the data-model-erd skill).
+const ERD_BOX_W = 300;
+const ERD_ROW_H = 22;
+const ERD_HEAD_H = 38;
+const ERD_BOX_GAP = 30; // vertical gap between boxes within a lane
+const ERD_COL_GAP = 150; // horizontal gap between lanes (room for edges + labels)
+const ERD_PAD = 24;
+const ERD_HEAD = 50; // top band reserved for the legend
+const erdColW = ERD_BOX_W + ERD_COL_GAP;
+
+// Resolve per-column attribute flags from entity + relationship metadata.
+// PI and identity are intentionally omitted — the browser does not collect them.
+function erdColumns(n) {
+  const e = n.e;
+  const sk = (e.surrogate_key_column || "").toUpperCase();
+  const nk = (e.natural_key_column || "").toUpperCase();
+  const fkCols = new Set();
+  for (const r of state.data.relationships) {
+    if (r.is_active === 0) continue;
+    if (erdKey(r.source_database, r.source_table) === n.key) {
+      fkCols.add((r.source_column || "").toUpperCase());
+    }
+  }
+  return columnsFor(e).map((c) => {
+    const up = (c.column_name || "").toUpperCase();
+    return {
+      name: c.column_name,
+      type: c.data_type || "",
+      pk: !!sk && up === sk,
+      nk: !!nk && up === nk,
+      fk: fkCols.has(up),
+      pii: !!c.is_pii,
+      sens: !!c.is_sensitive,
+      nn: !!c.is_required,
+    };
+  });
+}
+
+function erdBoxHeight(n) {
+  return ERD_HEAD_H + Math.max(1, n.cols.length) * ERD_ROW_H + 8;
+}
+
+// y-centre of a given column row (for anchoring edges to specific columns).
+function erdRowYOf(n, col) {
+  const up = (col || "").toUpperCase();
+  const i = n.cols.findIndex((c) => (c.name || "").toUpperCase() === up);
+  if (i < 0) return n.y + n.h / 2;
+  return n.y + ERD_HEAD_H + i * ERD_ROW_H + ERD_ROW_H / 2;
+}
+
+function erdBadgeChips(col) {
+  const chips = [];
+  if (col.pk) chips.push(["PK", "bg", "pk"]);
+  if (col.nk) chips.push(["NK", "ol", "nk"]);
+  if (col.fk) chips.push(["FK", "bg", "fk"]);
+  if (col.pii) chips.push(["PII", "bg", "pii"]);
+  if (col.sens) chips.push(["SENS", "ol", "sens"]);
+  if (col.nn) chips.push(["NN", "ol", "nn"]);
+  return chips;
+}
+
+function erdBoxSvg(n) {
+  const x = n.x;
+  const y = n.y;
+  const W = ERD_BOX_W;
+  const h = n.h;
   const name =
-    n.e.entity_name.length > 22 ? n.e.entity_name.slice(0, 21) + "…" : n.e.entity_name;
-  const cols = columnsFor(n.e).length;
-  return `<g class="erd-node" onclick="window.__erdSelect(${n.e.entity_metadata_id})">
-    <rect x="${n.x}" y="${n.y}" width="${ERD_NODE_W}" height="${ERD_NODE_H}" rx="7"
-          fill="var(--panel-2)" stroke="${n.colour}" stroke-width="1.5"/>
-    <rect x="${n.x}" y="${n.y}" width="4" height="${ERD_NODE_H}" rx="2" fill="${n.colour}"/>
-    <text class="erd-label" x="${n.x + 14}" y="${n.y + 17}">${esc(name)}</text>
-    <text class="erd-sub" x="${n.x + 14}" y="${n.y + 30}">${esc(n.e.table_name)} · ${cols} cols</text>
-    <title>${esc(n.e.database_name)}.${esc(n.e.table_name)}</title>
-  </g>`;
+    n.e.entity_name.length > 30 ? n.e.entity_name.slice(0, 29) + "…" : n.e.entity_name;
+  const p = [];
+  p.push(
+    `<g class="erd-box" data-key="${esc(n.key)}" onclick="window.__erdSelect(${n.e.entity_metadata_id})">`,
+  );
+  p.push(`<rect class="erd-box-bg" x="${x}" y="${y}" width="${W}" height="${h}" rx="9"/>`);
+  // Header band with rounded top corners, faintly tinted by the module colour.
+  p.push(
+    `<path class="erd-box-hd" d="M${x} ${y + 9} a9 9 0 0 1 9 -9 h${W - 18} a9 9 0 0 1 9 9 v${ERD_HEAD_H - 9} h-${W} z" fill="${n.colour}26"/>`,
+  );
+  p.push(`<rect x="${x}" y="${y}" width="4" height="${h}" fill="${n.colour}"/>`);
+  p.push(`<text class="erd-box-name" x="${x + 14}" y="${y + 18}">${esc(name)}</text>`);
+  p.push(
+    `<text class="erd-box-sub" x="${x + 14}" y="${y + 31}">${esc(n.mod)} · ${esc(n.e.table_name)}</text>`,
+  );
+  if (!n.cols.length) {
+    p.push(`<text class="erd-ct" x="${x + 14}" y="${y + ERD_HEAD_H + 15}">no column metadata</text>`);
+  }
+  n.cols.forEach((c, i) => {
+    const ry = y + ERD_HEAD_H + i * ERD_ROW_H;
+    if (i > 0)
+      p.push(`<line class="erd-rowline" x1="${x + 10}" y1="${ry}" x2="${x + W - 10}" y2="${ry}"/>`);
+    p.push(
+      `<text class="${c.fk ? "erd-cn fk" : "erd-cn"}" x="${x + 14}" y="${ry + 15}">${esc(c.name)}</text>`,
+    );
+    const chips = erdBadgeChips(c);
+    const widths = chips.map(([lbl]) => Math.round(lbl.length * 6.4 + 8) + 4);
+    let bx = x + W - 12 - widths.reduce((a, b) => a + b, 0);
+    const typeRight = bx - 6;
+    chips.forEach(([lbl, fillKind, key], j) => {
+      const w = widths[j] - 4;
+      const cls = fillKind === "bg" ? `erd-bg-${key}` : `erd-ol-${key}`;
+      p.push(`<rect class="${cls}" x="${bx}" y="${ry + 4}" width="${w}" height="15" rx="4"/>`);
+      p.push(
+        `<text class="erd-badge-t erd-tx-${key}" x="${bx + w / 2}" y="${ry + 15}" text-anchor="middle">${lbl}</text>`,
+      );
+      bx += widths[j];
+    });
+    p.push(
+      `<text class="erd-ct" x="${typeRight}" y="${ry + 15}" text-anchor="end">${esc(c.type)}</text>`,
+    );
+  });
+  p.push(`<title>${esc(n.e.database_name)}.${esc(n.e.table_name)}</title>`);
+  p.push(`</g>`);
+  return p.join("");
 }
 
 // Longest-path layering: referenced tables sit left, dependents flow right.
@@ -833,18 +953,23 @@ function showErd() {
     return;
   }
 
-  // Module → colour, and node objects keyed by db|table.
+  // Module → colour, and node objects keyed by db|table (with columns + height).
   const moduleColour = new Map();
   [...entitiesByModule()].forEach(([mod], i) =>
     moduleColour.set(mod, ERD_COLOURS[i % ERD_COLOURS.length]),
   );
   const byKey = new Map();
   for (const e of d.entities) {
-    byKey.set(erdKey(e.database_name, e.table_name), {
+    const key = erdKey(e.database_name, e.table_name);
+    const n = {
       e,
+      key,
       mod: e.module_name || "Other",
       colour: moduleColour.get(e.module_name) || ERD_COLOURS[0],
-    });
+    };
+    n.cols = erdColumns(n);
+    n.h = erdBoxHeight(n);
+    byKey.set(key, n);
   }
 
   // Adjacency over edges whose both endpoints are mapped entities.
@@ -867,8 +992,7 @@ function showErd() {
   const { layers } = erdLayers(byKey, out, inn);
   const isolated = [...byKey.keys()].filter((k) => !out.get(k).size && !inn.get(k).size);
 
-  // Order within each layer: start alphabetical, then one barycenter sweep
-  // (by mean rank of a node's targets) to reduce edge crossings.
+  // Order within each layer: alphabetical, then one barycenter sweep to reduce crossings.
   const nameOf = (k) => byKey.get(k).e.entity_name;
   layers.forEach((ls) =>
     ls.sort((a, b) => (byKey.get(a).mod + nameOf(a)).localeCompare(byKey.get(b).mod + nameOf(b))),
@@ -881,79 +1005,148 @@ function showErd() {
     setRanks();
   }
 
-  // Positions: x by layer, y centred per column.
-  const maxCount = Math.max(1, ...layers.map((l) => l.length));
+  // Positions: x by layer (lane); stack variable-height boxes top-down within a lane.
   const topY = ERD_PAD + ERD_HEAD;
+  let contentH = topY;
   for (let L = 0; L < layers.length; L++) {
-    const ls = layers[L];
-    const startY = topY + ((maxCount - ls.length) * erdRowH) / 2;
-    ls.forEach((k, i) => {
+    let y = topY;
+    for (const k of layers[L]) {
       const n = byKey.get(k);
       n.x = ERD_PAD + L * erdColW;
-      n.y = startY + i * erdRowH;
-    });
+      n.y = y;
+      y += n.h + ERD_BOX_GAP;
+    }
+    contentH = Math.max(contentH, y);
   }
-  const layeredW = ERD_PAD * 2 + Math.max(0, layers.length - 1) * erdColW + ERD_NODE_W;
-  let contentH = topY + maxCount * erdRowH;
+  const layeredW = ERD_PAD * 2 + Math.max(0, layers.length - 1) * erdColW + ERD_BOX_W;
 
-  // Isolated entities: wrapped grid below the layered graph.
+  // Isolated entities: wrapped grid below the layered graph (advances by tallest in row).
   let isoSvg = "";
   if (isolated.length) {
-    const perRow = Math.max(1, Math.floor((layeredW - ERD_PAD * 2 + ERD_COL_GAP) / erdColW));
-    const isoTop = contentH + 18;
+    const perRow = Math.max(1, Math.floor((Math.max(layeredW, 600) - ERD_PAD * 2 + ERD_COL_GAP) / erdColW));
+    const isoTop = contentH + 28;
     isoSvg += `<text class="erd-head" x="${ERD_PAD}" y="${isoTop}">Unconnected (${isolated.length})</text>`;
     isolated.sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+    let rowTop = isoTop + 14;
+    let rowMaxH = 0;
     isolated.forEach((k, i) => {
+      const col = i % perRow;
+      if (col === 0 && i > 0) {
+        rowTop += rowMaxH + ERD_BOX_GAP;
+        rowMaxH = 0;
+      }
       const n = byKey.get(k);
-      n.x = ERD_PAD + (i % perRow) * erdColW;
-      n.y = isoTop + 10 + Math.floor(i / perRow) * erdRowH;
+      n.x = ERD_PAD + col * erdColW;
+      n.y = rowTop;
+      rowMaxH = Math.max(rowMaxH, n.h);
     });
-    const rows = Math.ceil(isolated.length / perRow);
-    contentH = isoTop + 10 + rows * erdRowH;
-    isoSvg += isolated.map((k) => erdNodeSvg(byKey.get(k))).join("");
+    contentH = rowTop + rowMaxH + ERD_PAD;
+    isoSvg = isoSvg + isolated.map((k) => erdBoxSvg(byKey.get(k))).join("");
   }
 
-  // Edges: source (dependent, right) → target (referenced, left), arrow at target.
+  // Edges (drawn beneath boxes): anchored at the actual key columns; labels added on top.
   let edges = "";
+  const edgeLabels = [];
   for (const { sk, tk, r } of rels) {
     const s = byKey.get(sk);
     const t = byKey.get(tk);
-    const sMidY = s.y + ERD_NODE_H / 2;
-    const tMidY = t.y + ERD_NODE_H / 2;
+    const sy = erdRowYOf(s, r.source_column);
+    const ty = erdRowYOf(t, r.target_column);
     const rightward = t.x >= s.x;
-    const sx = rightward ? s.x + ERD_NODE_W : s.x;
-    const tx = rightward ? t.x : t.x + ERD_NODE_W;
-    const co = rightward ? 50 : -50;
-    edges += `<path class="erd-edge" d="M ${sx} ${sMidY} C ${sx + co} ${sMidY} ${tx - co} ${tMidY} ${tx} ${tMidY}" marker-end="url(#erd-arrow)"><title>${esc(r.relationship_meaning || r.relationship_type || "related")}</title></path>`;
+    const sx = rightward ? s.x + ERD_BOX_W : s.x;
+    const tx = rightward ? t.x : t.x + ERD_BOX_W;
+    const co = rightward ? 60 : -60;
+    const hard = (r.relationship_type || "").toUpperCase() === "FK" || !!r.is_mandatory;
+    const cls = hard ? "hard" : "soft";
+    edges +=
+      `<path class="erd-edge ${cls}" data-from="${esc(sk)}" data-to="${esc(tk)}" ` +
+      `d="M ${sx} ${sy} C ${sx + co} ${sy} ${tx - co} ${ty} ${tx} ${ty}">` +
+      `<title>${esc(r.relationship_meaning || r.relationship_type || "related")}</title></path>` +
+      `<circle class="erd-dot ${cls}" cx="${sx}" cy="${sy}" r="3"/>` +
+      `<circle class="erd-dot ${cls}" cx="${tx}" cy="${ty}" r="3"/>`;
+    let label = r.cardinality || "";
+    const meaning = (r.relationship_meaning || "").trim();
+    const gap = Math.abs(tx - sx);
+    if (meaning) {
+      const candidate = label ? `${label} · ${meaning}` : meaning;
+      if (candidate.length * 5.2 + 10 <= gap * 0.95) label = candidate;
+    }
+    if (label) edgeLabels.push({ x: (sx + tx) / 2, y: (sy + ty) / 2, text: label });
   }
+  const labelSvg = edgeLabels
+    .map((l) => {
+      const w = l.text.length * 5.2 + 10;
+      return (
+        `<rect class="erd-card-bg" x="${l.x - w / 2}" y="${l.y - 8}" width="${w}" height="15" rx="5"/>` +
+        `<text class="erd-card" x="${l.x}" y="${l.y + 3}" text-anchor="middle">${esc(l.text)}</text>`
+      );
+    })
+    .join("");
 
-  // Module colour legend.
+  // Legend row 1: module colours.  Row 2: attribute badges + edge styles.
   let lx = ERD_PAD;
-  const legend = [...moduleColour.entries()]
+  const modLegend = [...moduleColour.entries()]
     .map(([mod, colour]) => {
-      const item = `<rect x="${lx}" y="${ERD_PAD - 2}" width="11" height="11" rx="3" fill="${colour}"/><text class="erd-legend" x="${lx + 16}" y="${ERD_PAD + 7}">${esc(mod)}</text>`;
+      const item = `<rect x="${lx}" y="${ERD_PAD - 4}" width="11" height="11" rx="3" fill="${colour}"/><text class="erd-legend" x="${lx + 16}" y="${ERD_PAD + 5}">${esc(mod)}</text>`;
       lx += 30 + mod.length * 7;
       return item;
     })
     .join("");
 
-  const layered = [];
-  for (const ls of layers) for (const k of ls) layered.push(erdNodeSvg(byKey.get(k)));
+  const by = ERD_PAD + 18;
+  let bxL = ERD_PAD;
+  const badgeLegend = [
+    ["PK", "bg", "pk", "key"],
+    ["NK", "ol", "nk", "natural"],
+    ["FK", "bg", "fk", "foreign"],
+    ["PII", "bg", "pii", ""],
+    ["SENS", "ol", "sens", ""],
+    ["NN", "ol", "nn", "not null"],
+  ]
+    .map(([lbl, kind, key, note]) => {
+      const w = Math.round(lbl.length * 6.4 + 8);
+      const cls = kind === "bg" ? `erd-bg-${key}` : `erd-ol-${key}`;
+      let s = `<rect class="${cls}" x="${bxL}" y="${by - 9}" width="${w}" height="14" rx="4"/><text class="erd-badge-t erd-tx-${key}" x="${bxL + w / 2}" y="${by + 1}" text-anchor="middle">${lbl}</text>`;
+      bxL += w + 4;
+      if (note) {
+        s += `<text class="erd-legend" x="${bxL}" y="${by + 1}">${note}</text>`;
+        bxL += note.length * 6 + 12;
+      } else {
+        bxL += 8;
+      }
+      return s;
+    })
+    .join("");
+  let edgeLegend =
+    `<line class="erd-edge hard" x1="${bxL}" y1="${by - 4}" x2="${bxL + 22}" y2="${by - 4}"/>` +
+    `<text class="erd-legend" x="${bxL + 27}" y="${by + 1}">FK</text>`;
+  bxL += 27 + 22;
+  edgeLegend +=
+    `<line class="erd-edge soft" x1="${bxL}" y1="${by - 4}" x2="${bxL + 22}" y2="${by - 4}"/>` +
+    `<text class="erd-legend" x="${bxL + 27}" y="${by + 1}">soft</text>`;
+  bxL += 27 + 30;
 
-  const width = Math.max(layeredW, lx + ERD_PAD);
+  const boxes = [];
+  for (const ls of layers) for (const k of ls) boxes.push(erdBoxSvg(byKey.get(k)));
+
+  const width = Math.max(layeredW, lx + ERD_PAD, bxL + ERD_PAD);
   el("detail").innerHTML = `
     <h2>${esc(d.product_name)} — Entity map</h2>
-    <p class="sub">${byKey.size} entities · ${rels.length} relationships · left = referenced, right = dependent · click a node to open it</p>
+    <p class="sub">${byKey.size} entities · ${rels.length} relationships · left = referenced, right = dependent · hover to trace, click to open</p>
     <div class="erd-scroll">
       <svg class="erd" width="${width}" height="${contentH}" viewBox="0 0 ${width} ${contentH}">
-        <defs>
-          <marker id="erd-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)"/>
-          </marker>
-        </defs>
-        ${legend}${edges}${layered.join("")}${isoSvg}
+        ${modLegend}${badgeLegend}${edgeLegend}${edges}${boxes.join("")}${labelSvg}${isoSvg}
       </svg>
     </div>`;
+
+  // Wire hover-highlight after the SVG is in the DOM.
+  el("detail")
+    .querySelectorAll(".erd-box")
+    .forEach((b) => {
+      const key = b.getAttribute("data-key");
+      b.addEventListener("mouseenter", () => window.__erdHi(key));
+      b.addEventListener("mouseleave", () => window.__erdHiOff());
+    });
   renderWarnings();
 }
 
