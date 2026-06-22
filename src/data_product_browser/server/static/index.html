@@ -61,6 +61,13 @@
     }
     .tag.pii { background: rgba(255,123,114,.15); color: var(--pii); border: 1px solid var(--pii); }
     .tag.req { background: rgba(63,185,80,.12); color: var(--ok); border: 1px solid var(--ok); }
+    .tag.pk { background: rgba(243,108,33,.14); color: var(--td-orange); border: 1px solid var(--td-orange); }
+    .tag.nk { background: rgba(0,167,181,.14); color: var(--td-teal); border: 1px solid var(--td-teal); }
+    .tag.fk { background: rgba(74,168,255,.14); color: var(--accent); border: 1px solid var(--accent); }
+    .tag.sens { background: var(--pii); color: #1d0a08; border: 1px solid var(--pii); }
+    .tag.nn { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .fk-ref { margin-top: 3px; font-size: 11px; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .fk-ref code { color: var(--accent); background: none; padding: 0; }
     .desc { color: var(--muted); }
     .meta-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; margin-bottom: 18px; }
     .meta-grid dt { color: var(--muted); }
@@ -227,6 +234,16 @@
     .pill.bad { color: var(--pii); border-color: var(--pii); }
     .erd-scroll { overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
     svg.erd { display: block; }
+    .erd-toolbar { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }
+    .erd-btn { background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .erd-btn:hover { border-color: var(--accent); }
+    .erd-toolhint { color: var(--muted); font-size: 12px; }
+    .erd-toggle { cursor: pointer; }
+    .erd-toggle-bg { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
+    .erd-toggle:hover .erd-toggle-bg { stroke: var(--accent); }
+    .erd-toggle-t { fill: var(--muted); font-size: 14px; font-weight: 700; }
+    .erd-toggle:hover .erd-toggle-t { fill: var(--accent); }
     .erd-head { fill: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
     .erd-legend { fill: var(--muted); font-size: 11px; }
     /* attribute-level boxes */
@@ -386,6 +403,6 @@
     <nav id="tree"></nav>
     <main id="detail"><div class="empty">Select a data product to begin.</div></main>
   </div>
-  <script src="/app.js?v=8"></script>
+  <script src="/app.js?v=10"></script>
 </body>
 </html>

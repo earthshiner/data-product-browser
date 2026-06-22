@@ -309,6 +309,7 @@ function renderEntity(entity) {
       <dt>Object</dt><dd><code>${esc(entity.database_name)}.${esc(entity.table_name)}</code></dd>
       <dt>Module</dt><dd>${esc(entity.module_name)}</dd>
       <dt>View</dt><dd>${entity.view_name ? `<code>${esc(entity.view_name)}</code>` : "—"}</dd>
+      <dt>Surrogate key</dt><dd><code>${esc(entity.surrogate_key_column) || "—"}</code></dd>
       <dt>Natural key</dt><dd><code>${esc(entity.natural_key_column) || "—"}</code></dd>
       <dt>Temporal pattern</dt><dd>${esc(entity.temporal_pattern) || "—"}</dd>
       <dt>Industry standard</dt><dd>${esc(entity.industry_standard) || "—"}</dd>
@@ -359,14 +360,25 @@ function viewsHTML(entity) {
 }
 
 function schemaHTML(entity) {
+  const { sk, nk, fkCols, fkTargets } = entityKeyInfo(entity);
   const rows = columnsFor(entity)
     .map((c) => {
+      const up = (c.column_name || "").toUpperCase();
       const tags =
-        (c.is_pii ? '<span class="tag pii">PII</span>' : "") +
-        (c.is_sensitive ? '<span class="tag pii">SENSITIVE</span>' : "") +
-        (c.is_required ? '<span class="tag req">REQUIRED</span>' : "");
+        (sk && up === sk ? '<span class="tag pk" title="Primary / surrogate key">PK</span>' : "") +
+        (nk && up === nk ? '<span class="tag nk" title="Natural / business key">NK</span>' : "") +
+        (fkCols.has(up) ? '<span class="tag fk" title="Foreign key">FK</span>' : "") +
+        (c.is_pii ? '<span class="tag pii" title="Personally identifiable information">PII</span>' : "") +
+        (c.is_sensitive ? '<span class="tag sens" title="Sensitive (security-controlled)">SENS</span>' : "") +
+        (c.is_required ? '<span class="tag nn" title="NOT NULL (required)">NN</span>' : "");
+      const fkNote = fkCols.has(up)
+        ? `<div class="fk-ref">${fkTargets
+            .get(up)
+            .map((t) => `→ <code>${esc(t.table)}.${esc(t.col)}</code>`)
+            .join(", ")}</div>`
+        : "";
       return `<tr>
-        <td class="col-name">${esc(c.column_name)}${tags}</td>
+        <td class="col-name">${esc(c.column_name)}${tags}${fkNote}</td>
         <td><code>${esc(c.data_type) || "—"}</code></td>
         <td class="desc">${esc(c.business_description) || ""}</td>
         <td class="desc">${esc(c.data_classification) || ""}</td>
@@ -402,6 +414,7 @@ function schemaHTML(entity) {
       <tbody>${rows || '<tr><td colspan="4" class="desc">No column metadata.</td></tr>'}</tbody>
     </table>`;
 }
+
 
 function relationshipsHTML(entity) {
   const rels = relationshipsFor(entity);
@@ -810,6 +823,26 @@ window.__erdHiOff = () => {
   svg.querySelectorAll(".erd-on").forEach((n) => n.classList.remove("erd-on"));
 };
 
+// Collapse/expand a single entity between attribute-level and entity-level.
+window.__erdToggle = (ev, id) => {
+  if (ev) ev.stopPropagation(); // don't also open the entity
+  if (!state.erdCollapsed) state.erdCollapsed = new Set();
+  if (state.erdCollapsed.has(id)) state.erdCollapsed.delete(id);
+  else state.erdCollapsed.add(id);
+  showErd();
+};
+
+// Collapse all / expand all (one toggle, based on current state).
+window.__erdToggleAll = () => {
+  if (!state.erdCollapsed) state.erdCollapsed = new Set();
+  const ids = (state.data && state.data.entities ? state.data.entities : []).map(
+    (e) => e.entity_metadata_id,
+  );
+  const allCollapsed = ids.length > 0 && ids.every((id) => state.erdCollapsed.has(id));
+  state.erdCollapsed = new Set(allCollapsed ? [] : ids);
+  showErd();
+};
+
 // Attribute-level box geometry (matches the data-model-erd skill).
 const ERD_BOX_W = 300;
 const ERD_ROW_H = 22;
@@ -822,18 +855,35 @@ const erdColW = ERD_BOX_W + ERD_COL_GAP;
 
 // Resolve per-column attribute flags from entity + relationship metadata.
 // PI and identity are intentionally omitted — the browser does not collect them.
-function erdColumns(n) {
-  const e = n.e;
-  const sk = (e.surrogate_key_column || "").toUpperCase();
-  const nk = (e.natural_key_column || "").toUpperCase();
+// Shared attribute-level key/FK resolution (used by both the Schema tab and the
+// Entity map, so the two can never drift). Returns the surrogate/natural key
+// column names plus the set of FK source columns and their targets.
+function entityKeyInfo(entity) {
+  const sk = (entity.surrogate_key_column || "").toUpperCase();
+  const nk = (entity.natural_key_column || "").toUpperCase();
+  const key = erdKey(entity.database_name, entity.table_name);
   const fkCols = new Set();
-  for (const r of state.data.relationships) {
+  const fkTargets = new Map(); // UPPER(col) -> [{ db, table, col, r }]
+  for (const r of state.data.relationships || []) {
     if (r.is_active === 0) continue;
-    if (erdKey(r.source_database, r.source_table) === n.key) {
-      fkCols.add((r.source_column || "").toUpperCase());
+    if (erdKey(r.source_database, r.source_table) === key) {
+      const up = (r.source_column || "").toUpperCase();
+      fkCols.add(up);
+      if (!fkTargets.has(up)) fkTargets.set(up, []);
+      fkTargets.get(up).push({
+        db: r.target_database,
+        table: r.target_table,
+        col: r.target_column,
+        r,
+      });
     }
   }
-  return columnsFor(e).map((c) => {
+  return { sk, nk, fkCols, fkTargets };
+}
+
+function erdColumns(n) {
+  const { sk, nk, fkCols } = entityKeyInfo(n.e);
+  return columnsFor(n.e).map((c) => {
     const up = (c.column_name || "").toUpperCase();
     return {
       name: c.column_name,
@@ -849,11 +899,14 @@ function erdColumns(n) {
 }
 
 function erdBoxHeight(n) {
+  if (n.collapsed) return ERD_HEAD_H + 4; // entity-level: header only
   return ERD_HEAD_H + Math.max(1, n.cols.length) * ERD_ROW_H + 8;
 }
 
 // y-centre of a given column row (for anchoring edges to specific columns).
+// A collapsed entity has no visible rows, so edges anchor to the header centre.
 function erdRowYOf(n, col) {
+  if (n.collapsed) return n.y + n.h / 2;
   const up = (col || "").toUpperCase();
   const i = n.cols.findIndex((c) => (c.name || "").toUpperCase() === up);
   if (i < 0) return n.y + n.h / 2;
@@ -876,8 +929,9 @@ function erdBoxSvg(n) {
   const y = n.y;
   const W = ERD_BOX_W;
   const h = n.h;
+  const collapsed = n.collapsed;
   const name =
-    n.e.entity_name.length > 30 ? n.e.entity_name.slice(0, 29) + "…" : n.e.entity_name;
+    n.e.entity_name.length > 26 ? n.e.entity_name.slice(0, 25) + "…" : n.e.entity_name;
   const p = [];
   p.push(
     `<g class="erd-box" data-key="${esc(n.key)}" onclick="window.__erdSelect(${n.e.entity_metadata_id})">`,
@@ -888,37 +942,51 @@ function erdBoxSvg(n) {
     `<path class="erd-box-hd" d="M${x} ${y + 9} a9 9 0 0 1 9 -9 h${W - 18} a9 9 0 0 1 9 9 v${ERD_HEAD_H - 9} h-${W} z" fill="${n.colour}26"/>`,
   );
   p.push(`<rect x="${x}" y="${y}" width="4" height="${h}" fill="${n.colour}"/>`);
-  p.push(`<text class="erd-box-name" x="${x + 14}" y="${y + 18}">${esc(name)}</text>`);
+  // Collapse / expand toggle (top-right of the header).
+  const tg = collapsed ? "+" : "\u2212";
+  const bxr = x + W - 24;
+  const byr = y + (ERD_HEAD_H - 16) / 2;
   p.push(
-    `<text class="erd-box-sub" x="${x + 14}" y="${y + 31}">${esc(n.mod)} · ${esc(n.e.table_name)}</text>`,
+    `<g class="erd-toggle" onclick="window.__erdToggle(event, ${n.e.entity_metadata_id})">` +
+      `<rect class="erd-toggle-bg" x="${bxr}" y="${byr}" width="17" height="16" rx="4"/>` +
+      `<text class="erd-toggle-t" x="${bxr + 8.5}" y="${byr + 12}" text-anchor="middle">${tg}</text>` +
+      `<title>${collapsed ? "Expand to attributes" : "Collapse to entity"}</title></g>`,
   );
-  if (!n.cols.length) {
-    p.push(`<text class="erd-ct" x="${x + 14}" y="${y + ERD_HEAD_H + 15}">no column metadata</text>`);
-  }
-  n.cols.forEach((c, i) => {
-    const ry = y + ERD_HEAD_H + i * ERD_ROW_H;
-    if (i > 0)
-      p.push(`<line class="erd-rowline" x1="${x + 10}" y1="${ry}" x2="${x + W - 10}" y2="${ry}"/>`);
-    p.push(
-      `<text class="${c.fk ? "erd-cn fk" : "erd-cn"}" x="${x + 14}" y="${ry + 15}">${esc(c.name)}</text>`,
-    );
-    const chips = erdBadgeChips(c);
-    const widths = chips.map(([lbl]) => Math.round(lbl.length * 6.4 + 8) + 4);
-    let bx = x + W - 12 - widths.reduce((a, b) => a + b, 0);
-    const typeRight = bx - 6;
-    chips.forEach(([lbl, fillKind, key], j) => {
-      const w = widths[j] - 4;
-      const cls = fillKind === "bg" ? `erd-bg-${key}` : `erd-ol-${key}`;
-      p.push(`<rect class="${cls}" x="${bx}" y="${ry + 4}" width="${w}" height="15" rx="4"/>`);
+  p.push(`<text class="erd-box-name" x="${x + 14}" y="${y + 18}">${esc(name)}</text>`);
+  const sub = collapsed
+    ? `${esc(n.mod)} · ${esc(n.e.table_name)} · ${n.cols.length} col${n.cols.length === 1 ? "" : "s"}`
+    : `${esc(n.mod)} · ${esc(n.e.table_name)}`;
+  p.push(`<text class="erd-box-sub" x="${x + 14}" y="${y + 31}">${sub}</text>`);
+
+  if (!collapsed) {
+    if (!n.cols.length) {
+      p.push(`<text class="erd-ct" x="${x + 14}" y="${y + ERD_HEAD_H + 15}">no column metadata</text>`);
+    }
+    n.cols.forEach((c, i) => {
+      const ry = y + ERD_HEAD_H + i * ERD_ROW_H;
+      if (i > 0)
+        p.push(`<line class="erd-rowline" x1="${x + 10}" y1="${ry}" x2="${x + W - 10}" y2="${ry}"/>`);
       p.push(
-        `<text class="erd-badge-t erd-tx-${key}" x="${bx + w / 2}" y="${ry + 15}" text-anchor="middle">${lbl}</text>`,
+        `<text class="${c.fk ? "erd-cn fk" : "erd-cn"}" x="${x + 14}" y="${ry + 15}">${esc(c.name)}</text>`,
       );
-      bx += widths[j];
+      const chips = erdBadgeChips(c);
+      const widths = chips.map(([lbl]) => Math.round(lbl.length * 6.4 + 8) + 4);
+      let bx = x + W - 12 - widths.reduce((a, b) => a + b, 0);
+      const typeRight = bx - 6;
+      chips.forEach(([lbl, fillKind, key], j) => {
+        const w = widths[j] - 4;
+        const cls = fillKind === "bg" ? `erd-bg-${key}` : `erd-ol-${key}`;
+        p.push(`<rect class="${cls}" x="${bx}" y="${ry + 4}" width="${w}" height="15" rx="4"/>`);
+        p.push(
+          `<text class="erd-badge-t erd-tx-${key}" x="${bx + w / 2}" y="${ry + 15}" text-anchor="middle">${lbl}</text>`,
+        );
+        bx += widths[j];
+      });
+      p.push(
+        `<text class="erd-ct" x="${typeRight}" y="${ry + 15}" text-anchor="end">${esc(c.type)}</text>`,
+      );
     });
-    p.push(
-      `<text class="erd-ct" x="${typeRight}" y="${ry + 15}" text-anchor="end">${esc(c.type)}</text>`,
-    );
-  });
+  }
   p.push(`<title>${esc(n.e.database_name)}.${esc(n.e.table_name)}</title>`);
   p.push(`</g>`);
   return p.join("");
@@ -954,6 +1022,7 @@ function showErd() {
   }
 
   // Module → colour, and node objects keyed by db|table (with columns + height).
+  if (!state.erdCollapsed) state.erdCollapsed = new Set();
   const moduleColour = new Map();
   [...entitiesByModule()].forEach(([mod], i) =>
     moduleColour.set(mod, ERD_COLOURS[i % ERD_COLOURS.length]),
@@ -968,6 +1037,7 @@ function showErd() {
       colour: moduleColour.get(e.module_name) || ERD_COLOURS[0],
     };
     n.cols = erdColumns(n);
+    n.collapsed = state.erdCollapsed.has(e.entity_metadata_id);
     n.h = erdBoxHeight(n);
     byKey.set(key, n);
   }
@@ -1130,9 +1200,15 @@ function showErd() {
   for (const ls of layers) for (const k of ls) boxes.push(erdBoxSvg(byKey.get(k)));
 
   const width = Math.max(layeredW, lx + ERD_PAD, bxL + ERD_PAD);
+  const allIds = d.entities.map((e) => e.entity_metadata_id);
+  const allCollapsed = allIds.length > 0 && allIds.every((id) => state.erdCollapsed.has(id));
   el("detail").innerHTML = `
     <h2>${esc(d.product_name)} — Entity map</h2>
     <p class="sub">${byKey.size} entities · ${rels.length} relationships · left = referenced, right = dependent · hover to trace, click to open</p>
+    <div class="erd-toolbar">
+      <button class="erd-btn" onclick="window.__erdToggleAll()">${allCollapsed ? "＋ Expand all" : "－ Collapse all"}</button>
+      <span class="erd-toolhint">use the +/− on each entity to collapse or expand its attributes</span>
+    </div>
     <div class="erd-scroll">
       <svg class="erd" width="${width}" height="${contentH}" viewBox="0 0 ${width} ${contentH}">
         ${modLegend}${badgeLegend}${edgeLegend}${edges}${boxes.join("")}${labelSvg}${isoSvg}
