@@ -67,6 +67,24 @@
       font-size: 12px;
     }
     .empty { color: var(--muted); padding: 40px; text-align: center; }
+    /* Brand-coloured loading spinner — pure CSS, no GIF. Hollow ring in
+       Teradata orange that fades to transparent as it sweeps. */
+    .td-loader {
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
+      padding: 60px 20px; color: var(--muted); font-size: 13px;
+    }
+    .td-spinner {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: conic-gradient(from 0deg, var(--td-orange) 0%, rgba(255,95,2,.05) 70%, transparent 100%);
+      -webkit-mask: radial-gradient(farthest-side, transparent 62%, #000 64%);
+              mask: radial-gradient(farthest-side, transparent 62%, #000 64%);
+      animation: td-spin .85s linear infinite;
+    }
+    .td-spinner.sm { width: 28px; height: 28px; }
+    @keyframes td-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .td-spinner { animation-duration: 3s; }
+    }
     h2 { margin: 0 0 4px; font-size: 22px; }
     .sub { color: var(--muted); margin: 0 0 20px; }
     table { border-collapse: collapse; width: 100%; margin-top: 8px; }
@@ -462,6 +480,6 @@
     <nav id="tree"></nav>
     <main id="detail"><div class="empty">Select a data product to begin.</div></main>
   </div>
-  <script src="/app.js?v=18"></script>
+  <script src="/app.js?v=19"></script>
 </body>
 </html>

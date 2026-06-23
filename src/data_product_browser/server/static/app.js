@@ -61,7 +61,7 @@ async function loadProduct(name) {
   state.activeEntity = null;
   setStatus("Loading " + name + "…");
   el("tree").innerHTML = "";
-  el("detail").innerHTML = '<div class="empty">Loading metadata…</div>';
+  el("detail").innerHTML = tdLoader(`Loading ${esc(name)}…`);
   try {
     const { data_product, warnings } = await fetchJSON(
       "/api/products/" + encodeURIComponent(name),
@@ -221,6 +221,12 @@ function selectEntity(key) {
   if (!entity) return;
   renderEntity(entity);
   el("detail").scrollTop = 0;
+}
+
+// Branded loading spinner — Teradata-orange ring, no GIF. Pass the label that
+// describes what's being awaited (e.g. "Loading CallCentre…").
+function tdLoader(label) {
+  return `<div class="td-loader"><div class="td-spinner" role="status" aria-label="${esc(label)}"></div><div>${esc(label)}</div></div>`;
 }
 
 function esc(s) {
@@ -388,7 +394,7 @@ async function renderDdlTab(entity, body) {
     wireCopy(cached.raw);
     return;
   }
-  body.innerHTML = headerHTML("loading…") + `<div class="empty">Running SHOW TABLE…</div>`;
+  body.innerHTML = headerHTML("loading…") + tdLoader("Running SHOW TABLE…");
   try {
     const url = `/api/ddl?database=${encodeURIComponent(entity.database_name)}&table=${encodeURIComponent(entity.table_name)}`;
     const data = await fetchJSON(url);
