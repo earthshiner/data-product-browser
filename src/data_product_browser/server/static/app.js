@@ -70,6 +70,11 @@ async function loadProduct(name) {
     state.warnings = warnings || [];
     state.view = "ops";
     state.activeEntity = null;
+    // Start with every module collapsed so the tree opens compact —
+    // the user expands the modules they care about.
+    state.collapsedModules = new Set(
+      [...new Set((data_product.entities || []).map((e) => e.module_name || "Other"))],
+    );
     renderTree();
     showOps();
     const counts = data_product;
