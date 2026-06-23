@@ -65,6 +65,16 @@ def _abort(message: str) -> None:
     raise typer.Exit(1)
 
 
+def _env_var_examples(env_var: str, example: str) -> str:
+    """Cross-shell snippet for setting an environment variable for the session."""
+    return (
+        "  Set the environment variable for this shell session:\n\n"
+        f'    $env:{env_var} = "{example}"   # PowerShell\n'
+        f"    set {env_var}={example}        # Windows cmd.exe\n"
+        f'    export {env_var}="{example}"   # bash / zsh'
+    )
+
+
 def _credential_help(label: str, env_var: str, cli_option: str, example: str) -> str:
     """A consistent 'how to provide this' message listing both an arg and env var."""
     return (
@@ -72,7 +82,8 @@ def _credential_help(label: str, env_var: str, cli_option: str, example: str) ->
         f"  Provide it in either of these ways:\n\n"
         f"    • Command-line option:   {cli_option} {example}\n"
         f"    • Environment variable:  {env_var}={example}\n"
-        f"      (a '{env_var}={example}' line in a .env file in the current directory works too)"
+        f"      (a '{env_var}={example}' line in a .env file in the current directory works too)\n\n"
+        f"{_env_var_examples(env_var, example)}"
     )
 
 
@@ -83,7 +94,8 @@ def _password_help() -> str:
         "    • Store it once (recommended):  data-product-browser store-password\n"
         f"    • Environment variable:         {_ENV_PASSWORD}=your-password\n"
         "    • Command-line option:          --td-password your-password\n"
-        "      (a password on the command line may be visible to other processes)"
+        "      (a password on the command line may be visible to other processes)\n\n"
+        f"{_env_var_examples(_ENV_PASSWORD, 'your-password')}"
     )
 
 
@@ -98,7 +110,8 @@ def _login_help() -> str:
         "    • Store it once (recommended):  data-product-browser store-password\n"
         f"    • Environment variable:         {_ENV_PASSWORD}=your-password\n"
         "    • Command-line option:          --td-password your-password\n"
-        "      (a password on the command line may be visible to other processes)"
+        "      (a password on the command line may be visible to other processes)\n\n"
+        f"{_env_var_examples(_ENV_PASSWORD, 'your-password')}"
     )
 
 
@@ -226,7 +239,8 @@ def generate(
     td_host: str = typer.Option(None, "--td-host", help="Teradata host (overrides TD_HOST)"),
     td_user: str = typer.Option(None, "--td-user", help="Teradata username (overrides TD_USER)"),
     td_password: str = typer.Option(
-        None, "--td-password",
+        None,
+        "--td-password",
         help="Teradata password (overrides TD_PASSWORD; may be visible to other processes)",
     ),
 ):
@@ -286,7 +300,8 @@ def dump(
     td_host: str = typer.Option(None, "--td-host", help="Teradata host (overrides TD_HOST)"),
     td_user: str = typer.Option(None, "--td-user", help="Teradata username (overrides TD_USER)"),
     td_password: str = typer.Option(
-        None, "--td-password",
+        None,
+        "--td-password",
         help="Teradata password (overrides TD_PASSWORD; may be visible to other processes)",
     ),
 ):
@@ -369,7 +384,8 @@ def serve(
     td_host: str = typer.Option(None, "--td-host", help="Teradata host (overrides TD_HOST)"),
     td_user: str = typer.Option(None, "--td-user", help="Teradata username (overrides TD_USER)"),
     td_password: str = typer.Option(
-        None, "--td-password",
+        None,
+        "--td-password",
         help="Teradata password (overrides TD_PASSWORD; may be visible to other processes)",
     ),
 ):
