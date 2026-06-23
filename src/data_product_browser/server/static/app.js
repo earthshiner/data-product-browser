@@ -832,6 +832,132 @@ window.__erdToggle = (ev, id) => {
   showErd();
 };
 
+// --- ERD: SVG export ---------------------------------------------------------
+// Build a self-contained `<style>` block for the exported SVG: inline the
+// computed CSS-variable values from the live document plus every `.erd-*` rule
+// from page stylesheets, so the file renders correctly outside the app.
+function erdExportStyles() {
+  const cs = getComputedStyle(document.documentElement);
+  const vars = [
+    "--bg", "--panel", "--panel-2", "--text", "--muted", "--border",
+    "--accent", "--td-orange", "--td-blue", "--pii", "--ok",
+  ];
+  const root = vars
+    .map((v) => `${v}: ${(cs.getPropertyValue(v) || "").trim() || "inherit"};`)
+    .join(" ");
+  const rules = [];
+  for (const sheet of document.styleSheets) {
+    let list;
+    try {
+      list = sheet.cssRules;
+    } catch {
+      continue; // cross-origin sheet — skip
+    }
+    if (!list) continue;
+    for (const r of list) {
+      if (r.cssText && /\.erd[-.\s,{]/.test(r.cssText)) rules.push(r.cssText);
+    }
+  }
+  return (
+    `<style>:root { ${root} } ` +
+    `svg { background: var(--bg); font-family: Inter, -apple-system, system-ui, sans-serif; } ` +
+    rules.join(" ") +
+    `</style>`
+  );
+}
+
+function erdSerialiseAndDownload(svgClone, filename, viewBox) {
+  svgClone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  svgClone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+  if (viewBox) {
+    const parts = viewBox.split(/\s+/).map(Number);
+    svgClone.setAttribute("viewBox", viewBox);
+    svgClone.setAttribute("width", parts[2]);
+    svgClone.setAttribute("height", parts[3]);
+  }
+  // Strip the per-box toggle/export controls — they're noise outside the app.
+  svgClone.querySelectorAll(".erd-toggle").forEach((g) => g.remove());
+  svgClone.insertAdjacentHTML("afterbegin", erdExportStyles());
+
+  const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + svgClone.outerHTML;
+  const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+window.__erdExportFull = () => {
+  const svg = document.querySelector("svg.erd");
+  if (!svg) return;
+  const name = (state.data && state.data.product_name) || "entity-map";
+  erdSerialiseAndDownload(svg.cloneNode(true), `${name.replace(/[^\w-]+/g, "_")}-entity-map.svg`);
+};
+
+// Export the sub-graph for one entity: the box itself + every box directly
+// connected to it by a relationship + the connecting edges and labels. Tight
+// viewBox is computed from the kept boxes so the legend (above the boxes) is
+// naturally clipped out.
+window.__erdExportFocused = (ev, focusKey) => {
+  if (ev) ev.stopPropagation();
+  const svg = document.querySelector("svg.erd");
+  if (!svg) return;
+  const clone = svg.cloneNode(true);
+
+  const keep = new Set([focusKey]);
+  clone.querySelectorAll(".erd-edge-g").forEach((g) => {
+    const f = g.getAttribute("data-from");
+    const t = g.getAttribute("data-to");
+    if (f === focusKey || t === focusKey) {
+      keep.add(f);
+      keep.add(t);
+    } else {
+      g.remove();
+    }
+  });
+  clone.querySelectorAll(".erd-card-g").forEach((g) => {
+    const f = g.getAttribute("data-from");
+    const t = g.getAttribute("data-to");
+    if (!(f === focusKey || t === focusKey)) g.remove();
+  });
+  clone.querySelectorAll(".erd-box").forEach((b) => {
+    if (!keep.has(b.getAttribute("data-key"))) b.remove();
+  });
+
+  let xMin = Infinity, yMin = Infinity, xMax = -Infinity, yMax = -Infinity;
+  clone.querySelectorAll(".erd-box").forEach((b) => {
+    const r = b.querySelector(".erd-box-bg");
+    if (!r) return;
+    const x = parseFloat(r.getAttribute("x"));
+    const y = parseFloat(r.getAttribute("y"));
+    const w = parseFloat(r.getAttribute("width"));
+    const h = parseFloat(r.getAttribute("height"));
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      xMin = Math.min(xMin, x);
+      yMin = Math.min(yMin, y);
+      xMax = Math.max(xMax, x + w);
+      yMax = Math.max(yMax, y + h);
+    }
+  });
+  let viewBox = null;
+  if (Number.isFinite(xMin)) {
+    const M = 30;
+    viewBox = `${xMin - M} ${yMin - M} ${xMax - xMin + 2 * M} ${yMax - yMin + 2 * M}`;
+  }
+
+  const ent = (state.data && state.data.entities || []).find(
+    (e) => erdKey(e.database_name, e.table_name) === focusKey,
+  );
+  const baseName = (ent && ent.entity_name ? ent.entity_name : focusKey).replace(
+    /[^\w-]+/g, "_",
+  );
+  erdSerialiseAndDownload(clone, `${baseName}-relationships.svg`, viewBox);
+};
+
 // Collapse all / expand all (one toggle, based on current state).
 window.__erdToggleAll = () => {
   if (!state.erdCollapsed) state.erdCollapsed = new Set();
@@ -1020,6 +1146,14 @@ function erdBoxSvg(n) {
       `<rect class="erd-toggle-bg" x="${bxr}" y="${byr}" width="17" height="16" rx="4"/>` +
       `<text class="erd-toggle-t" x="${bxr + 8.5}" y="${byr + 12}" text-anchor="middle">${tg}</text>` +
       `<title>${collapsed ? "Expand to attributes" : "Collapse to entity"}</title></g>`,
+  );
+  // Per-box SVG export: sub-graph of this entity + its 1-hop neighbours.
+  const bxe = bxr - 22;
+  p.push(
+    `<g class="erd-toggle" onclick="window.__erdExportFocused(event, '${esc(n.key)}')">` +
+      `<rect class="erd-toggle-bg" x="${bxe}" y="${byr}" width="17" height="16" rx="4"/>` +
+      `<text class="erd-toggle-t" x="${bxe + 8.5}" y="${byr + 12}" text-anchor="middle" font-size="11">\u2913</text>` +
+      `<title>Export this entity's relationships as SVG</title></g>`,
   );
   p.push(`<text class="erd-box-name" x="${x + 14}" y="${y + 18}">${esc(name)}</text>`);
   const sub = collapsed
@@ -1210,10 +1344,12 @@ function showErd() {
         `<circle class="erd-dot ${cls}" cx="${tx}" cy="${ty}" r="3"/>`;
     }
     edges +=
+      `<g class="erd-edge-g" data-from="${esc(sk)}" data-to="${esc(tk)}">` +
       `<path class="erd-edge ${cls}" data-from="${esc(sk)}" data-to="${esc(tk)}" ` +
       `d="M ${sx} ${sy} C ${sx + co} ${sy} ${tx - co} ${ty} ${tx} ${ty}">` +
       `<title>${esc(r.relationship_meaning || r.relationship_type || "related")}</title></path>` +
-      endpoints;
+      endpoints +
+      `</g>`;
     // Truncate the label to fit the available gap (cap at ~220px so multi-lane
     // edges don't grow labels into adjacent boxes). Cardinality is preserved
     // verbatim whenever possible; the meaning gets ellipsised. Full text lives
@@ -1236,7 +1372,7 @@ function showErd() {
       } else {
         text = meaning.slice(0, Math.max(1, maxChars - 1)) + "…";
       }
-      edgeLabels.push({ x: (sx + tx) / 2, y: (sy + ty) / 2, text, full: fullLabel });
+      edgeLabels.push({ x: (sx + tx) / 2, y: (sy + ty) / 2, text, full: fullLabel, sk, tk });
     }
   }
   const labelSvg = edgeLabels
@@ -1244,7 +1380,7 @@ function showErd() {
       const w = l.text.length * 5.2 + 10;
       const title = l.full !== l.text ? `<title>${esc(l.full)}</title>` : "";
       return (
-        `<g class="erd-card-g">${title}` +
+        `<g class="erd-card-g" data-from="${esc(l.sk)}" data-to="${esc(l.tk)}">${title}` +
         `<rect class="erd-card-bg" x="${l.x - w / 2}" y="${l.y - 8}" width="${w}" height="15" rx="5"/>` +
         `<text class="erd-card" x="${l.x}" y="${l.y + 3}" text-anchor="middle">${esc(l.text)}</text>` +
         `</g>`
@@ -1306,7 +1442,8 @@ function showErd() {
     <p class="sub">${byKey.size} entities · ${rels.length} relationships · left = referenced, right = dependent · hover to trace, click to open</p>
     <div class="erd-toolbar">
       <button class="erd-btn" onclick="window.__erdToggleAll()">${allCollapsed ? "＋ Expand all" : "－ Collapse all"}</button>
-      <span class="erd-toolhint">use the +/− on each entity to collapse or expand its attributes</span>
+      <button class="erd-btn" onclick="window.__erdExportFull()">⤓ Export SVG</button>
+      <span class="erd-toolhint">use the +/− on each entity to collapse or expand; ⤓ on a box exports its relationships</span>
     </div>
     <div class="erd-scroll">
       <svg class="erd" width="${width}" height="${contentH}" viewBox="0 0 ${width} ${contentH}">
