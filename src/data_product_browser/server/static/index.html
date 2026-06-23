@@ -232,7 +232,25 @@
     .pill-row { margin: 4px 0 10px; }
     .pill.ok { color: var(--ok); border-color: var(--ok); }
     .pill.bad { color: var(--pii); border-color: var(--pii); }
-    .erd-scroll { overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+    .erd-scroll {
+      overflow: auto; border: 1px solid var(--border); border-radius: 10px;
+      background: var(--bg);
+      /* Cap height so the horizontal scrollbar stays visible in the viewport
+         instead of sitting at the bottom of a tall SVG (which forces the user
+         to scroll the page first). */
+      max-height: calc(100vh - 220px);
+      /* Always reserve scrollbar space so the gutter is visible — Firefox. */
+      scrollbar-gutter: stable both-edges;
+      scrollbar-color: var(--border) transparent;
+      scrollbar-width: auto;
+    }
+    .erd-scroll::-webkit-scrollbar { width: 12px; height: 12px; }
+    .erd-scroll::-webkit-scrollbar-track { background: var(--panel-2); border-radius: 6px; }
+    .erd-scroll::-webkit-scrollbar-thumb {
+      background: var(--border); border-radius: 6px; border: 2px solid var(--panel-2);
+    }
+    .erd-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+    .erd-scroll::-webkit-scrollbar-corner { background: var(--panel-2); }
     svg.erd { display: block; }
     .erd-toolbar { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }
     .erd-btn { background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
@@ -262,6 +280,13 @@
     .erd-edge.erd-on { stroke-width: 3.2; }
     .erd-dot.hard { fill: var(--td-orange); }
     .erd-dot.soft { fill: var(--accent); }
+    .erd-glyph { fill: none; stroke-width: 1.6; stroke-linecap: round; }
+    .erd-glyph.hard { stroke: var(--td-orange); }
+    .erd-glyph.soft { stroke: var(--accent); }
+    .erd-glyph-bg { fill: var(--bg); stroke-width: 1.6; }
+    .erd-glyph-bg.hard { stroke: var(--td-orange); }
+    .erd-glyph-bg.soft { stroke: var(--accent); }
+    .erd-card-g { pointer-events: all; }
     .erd-card-bg { fill: var(--bg); opacity: .82; }
     .erd-card { fill: var(--text); font-size: 9.5px; font-weight: 600; }
     .erd-dimmed { opacity: .12; transition: opacity .12s; }
@@ -403,6 +428,6 @@
     <nav id="tree"></nav>
     <main id="detail"><div class="empty">Select a data product to begin.</div></main>
   </div>
-  <script src="/app.js?v=10"></script>
+  <script src="/app.js?v=11"></script>
 </body>
 </html>

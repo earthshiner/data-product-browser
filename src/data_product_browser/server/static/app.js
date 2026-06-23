@@ -843,6 +843,75 @@ window.__erdToggleAll = () => {
   showErd();
 };
 
+// Crow's-foot cardinality parsing. Returns [sourceEnd, targetEnd] where each
+// end is one of "one" | "zone" (zero-or-one) | "many" | "omany" (one-or-many)
+// | "zmany" (zero-or-many), or null when the string isn't a recognised
+// two-sided cardinality — in which case we fall back to plain endpoint dots.
+function erdParseCardinality(card) {
+  if (!card) return null;
+  const c = String(card).trim();
+  if (!c) return null;
+  // Split on a two-sided separator (":", "-", " to "), but not on UML range "..".
+  let parts;
+  if (/[\s\-]to[\s\-]/i.test(c)) parts = c.split(/[\s\-]+to[\s\-]+/i);
+  else if (/[:\-]/.test(c)) parts = c.split(/\s*[:\-]\s*/);
+  else return null;
+  if (parts.length !== 2) return null;
+  const a = erdEndKind(parts[0]);
+  const b = erdEndKind(parts[1]);
+  if (!a || !b) return null;
+  return [a, b];
+}
+function erdEndKind(s) {
+  const t = String(s).replace(/\s+/g, "").toUpperCase();
+  if (t === "1" || t === "ONE") return "one";
+  if (t === "0..1" || t === "ZONE" || t === "0,1") return "zone";
+  if (t === "1..*" || t === "1..N" || t === "1..M" || t === "1+") return "omany";
+  if (t === "*" || t === "N" || t === "M" || t === "MANY" || t === "0..*" || t === "0..N")
+    return "many";
+  return null;
+}
+
+// Draw the crow's-foot glyph at an edge endpoint. (x,y) is the path endpoint
+// on the box edge; dx is +1 if the line departs in the +x direction from this
+// end, -1 if it departs leftward. The glyph occupies ~12px in the gutter.
+function erdGlyphSvg(x, y, kind, dx, cls) {
+  const xb = (d) => x + d * dx;
+  const s = `class="erd-glyph ${cls}"`;
+  const sb = `class="erd-glyph-bg ${cls}"`;
+  const apex = 12;
+  switch (kind) {
+    case "one":
+      return `<line ${s} x1="${xb(6)}" y1="${y - 6}" x2="${xb(6)}" y2="${y + 6}"/>`;
+    case "zone":
+      return (
+        `<circle ${sb} cx="${xb(4)}" cy="${y}" r="3.2"/>` +
+        `<line ${s} x1="${xb(11)}" y1="${y - 6}" x2="${xb(11)}" y2="${y + 6}"/>`
+      );
+    case "many":
+      return (
+        `<line ${s} x1="${xb(0)}" y1="${y - 5}" x2="${xb(apex)}" y2="${y}"/>` +
+        `<line ${s} x1="${xb(0)}" y1="${y}" x2="${xb(apex)}" y2="${y}"/>` +
+        `<line ${s} x1="${xb(0)}" y1="${y + 5}" x2="${xb(apex)}" y2="${y}"/>`
+      );
+    case "omany":
+      return (
+        `<line ${s} x1="${xb(2)}" y1="${y - 6}" x2="${xb(2)}" y2="${y + 6}"/>` +
+        `<line ${s} x1="${xb(4)}" y1="${y - 5}" x2="${xb(apex)}" y2="${y}"/>` +
+        `<line ${s} x1="${xb(4)}" y1="${y}" x2="${xb(apex)}" y2="${y}"/>` +
+        `<line ${s} x1="${xb(4)}" y1="${y + 5}" x2="${xb(apex)}" y2="${y}"/>`
+      );
+    case "zmany":
+      return (
+        `<circle ${sb} cx="${xb(3)}" cy="${y}" r="2.8"/>` +
+        `<line ${s} x1="${xb(5)}" y1="${y - 5}" x2="${xb(apex)}" y2="${y}"/>` +
+        `<line ${s} x1="${xb(5)}" y1="${y}" x2="${xb(apex)}" y2="${y}"/>` +
+        `<line ${s} x1="${xb(5)}" y1="${y + 5}" x2="${xb(apex)}" y2="${y}"/>`
+      );
+  }
+  return "";
+}
+
 // Attribute-level box geometry (matches the data-model-erd skill).
 const ERD_BOX_W = 300;
 const ERD_ROW_H = 22;
@@ -1128,27 +1197,57 @@ function showErd() {
     const co = rightward ? 60 : -60;
     const hard = (r.relationship_type || "").toUpperCase() === "FK" || !!r.is_mandatory;
     const cls = hard ? "hard" : "soft";
+    const parsed = erdParseCardinality(r.cardinality);
+    let endpoints;
+    if (parsed) {
+      const [srcKind, tgtKind] = parsed;
+      endpoints =
+        erdGlyphSvg(sx, sy, srcKind, rightward ? 1 : -1, cls) +
+        erdGlyphSvg(tx, ty, tgtKind, rightward ? -1 : 1, cls);
+    } else {
+      endpoints =
+        `<circle class="erd-dot ${cls}" cx="${sx}" cy="${sy}" r="3"/>` +
+        `<circle class="erd-dot ${cls}" cx="${tx}" cy="${ty}" r="3"/>`;
+    }
     edges +=
       `<path class="erd-edge ${cls}" data-from="${esc(sk)}" data-to="${esc(tk)}" ` +
       `d="M ${sx} ${sy} C ${sx + co} ${sy} ${tx - co} ${ty} ${tx} ${ty}">` +
       `<title>${esc(r.relationship_meaning || r.relationship_type || "related")}</title></path>` +
-      `<circle class="erd-dot ${cls}" cx="${sx}" cy="${sy}" r="3"/>` +
-      `<circle class="erd-dot ${cls}" cx="${tx}" cy="${ty}" r="3"/>`;
-    let label = r.cardinality || "";
+      endpoints;
+    // Truncate the label to fit the available gap (cap at ~220px so multi-lane
+    // edges don't grow labels into adjacent boxes). Cardinality is preserved
+    // verbatim whenever possible; the meaning gets ellipsised. Full text lives
+    // in a <title> tooltip so nothing is lost.
+    const card = (r.cardinality || "").trim();
     const meaning = (r.relationship_meaning || "").trim();
-    const gap = Math.abs(tx - sx);
-    if (meaning) {
-      const candidate = label ? `${label} · ${meaning}` : meaning;
-      if (candidate.length * 5.2 + 10 <= gap * 0.95) label = candidate;
+    const fullLabel = card && meaning ? `${card} · ${meaning}` : card || meaning;
+    if (fullLabel) {
+      const gap = Math.abs(tx - sx);
+      const maxW = Math.min(Math.max(gap * 0.85, 40), 220);
+      const maxChars = Math.max(4, Math.floor((maxW - 10) / 5.2));
+      let text;
+      if (fullLabel.length <= maxChars) {
+        text = fullLabel;
+      } else if (card && card.length + 5 <= maxChars && meaning) {
+        const room = Math.max(1, maxChars - card.length - 4); // " · " = 3, "…" = 1
+        text = `${card} · ${meaning.slice(0, room)}…`;
+      } else if (card) {
+        text = card;
+      } else {
+        text = meaning.slice(0, Math.max(1, maxChars - 1)) + "…";
+      }
+      edgeLabels.push({ x: (sx + tx) / 2, y: (sy + ty) / 2, text, full: fullLabel });
     }
-    if (label) edgeLabels.push({ x: (sx + tx) / 2, y: (sy + ty) / 2, text: label });
   }
   const labelSvg = edgeLabels
     .map((l) => {
       const w = l.text.length * 5.2 + 10;
+      const title = l.full !== l.text ? `<title>${esc(l.full)}</title>` : "";
       return (
+        `<g class="erd-card-g">${title}` +
         `<rect class="erd-card-bg" x="${l.x - w / 2}" y="${l.y - 8}" width="${w}" height="15" rx="5"/>` +
-        `<text class="erd-card" x="${l.x}" y="${l.y + 3}" text-anchor="middle">${esc(l.text)}</text>`
+        `<text class="erd-card" x="${l.x}" y="${l.y + 3}" text-anchor="middle">${esc(l.text)}</text>` +
+        `</g>`
       );
     })
     .join("");
