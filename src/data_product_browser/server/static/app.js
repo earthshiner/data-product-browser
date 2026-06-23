@@ -832,6 +832,132 @@ window.__erdToggle = (ev, id) => {
   showErd();
 };
 
+// --- ERD: SVG export ---------------------------------------------------------
+// Build a self-contained `<style>` block for the exported SVG: inline the
+// computed CSS-variable values from the live document plus every `.erd-*` rule
+// from page stylesheets, so the file renders correctly outside the app.
+function erdExportStyles() {
+  const cs = getComputedStyle(document.documentElement);
+  const vars = [
+    "--bg", "--panel", "--panel-2", "--text", "--muted", "--border",
+    "--accent", "--td-orange", "--td-blue", "--pii", "--ok",
+  ];
+  const root = vars
+    .map((v) => `${v}: ${(cs.getPropertyValue(v) || "").trim() || "inherit"};`)
+    .join(" ");
+  const rules = [];
+  for (const sheet of document.styleSheets) {
+    let list;
+    try {
+      list = sheet.cssRules;
+    } catch {
+      continue; // cross-origin sheet — skip
+    }
+    if (!list) continue;
+    for (const r of list) {
+      if (r.cssText && /\.erd[-.\s,{]/.test(r.cssText)) rules.push(r.cssText);
+    }
+  }
+  return (
+    `<style>:root { ${root} } ` +
+    `svg { background: var(--bg); font-family: Inter, -apple-system, system-ui, sans-serif; } ` +
+    rules.join(" ") +
+    `</style>`
+  );
+}
+
+function erdSerialiseAndDownload(svgClone, filename, viewBox) {
+  svgClone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  svgClone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+  if (viewBox) {
+    const parts = viewBox.split(/\s+/).map(Number);
+    svgClone.setAttribute("viewBox", viewBox);
+    svgClone.setAttribute("width", parts[2]);
+    svgClone.setAttribute("height", parts[3]);
+  }
+  // Strip the per-box toggle/export controls — they're noise outside the app.
+  svgClone.querySelectorAll(".erd-toggle").forEach((g) => g.remove());
+  svgClone.insertAdjacentHTML("afterbegin", erdExportStyles());
+
+  const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + svgClone.outerHTML;
+  const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+window.__erdExportFull = () => {
+  const svg = document.querySelector("svg.erd");
+  if (!svg) return;
+  const name = (state.data && state.data.product_name) || "entity-map";
+  erdSerialiseAndDownload(svg.cloneNode(true), `${name.replace(/[^\w-]+/g, "_")}-entity-map.svg`);
+};
+
+// Export the sub-graph for one entity: the box itself + every box directly
+// connected to it by a relationship + the connecting edges and labels. Tight
+// viewBox is computed from the kept boxes so the legend (above the boxes) is
+// naturally clipped out.
+window.__erdExportFocused = (ev, focusKey) => {
+  if (ev) ev.stopPropagation();
+  const svg = document.querySelector("svg.erd");
+  if (!svg) return;
+  const clone = svg.cloneNode(true);
+
+  const keep = new Set([focusKey]);
+  clone.querySelectorAll(".erd-edge-g").forEach((g) => {
+    const f = g.getAttribute("data-from");
+    const t = g.getAttribute("data-to");
+    if (f === focusKey || t === focusKey) {
+      keep.add(f);
+      keep.add(t);
+    } else {
+      g.remove();
+    }
+  });
+  clone.querySelectorAll(".erd-card-g").forEach((g) => {
+    const f = g.getAttribute("data-from");
+    const t = g.getAttribute("data-to");
+    if (!(f === focusKey || t === focusKey)) g.remove();
+  });
+  clone.querySelectorAll(".erd-box").forEach((b) => {
+    if (!keep.has(b.getAttribute("data-key"))) b.remove();
+  });
+
+  let xMin = Infinity, yMin = Infinity, xMax = -Infinity, yMax = -Infinity;
+  clone.querySelectorAll(".erd-box").forEach((b) => {
+    const r = b.querySelector(".erd-box-bg");
+    if (!r) return;
+    const x = parseFloat(r.getAttribute("x"));
+    const y = parseFloat(r.getAttribute("y"));
+    const w = parseFloat(r.getAttribute("width"));
+    const h = parseFloat(r.getAttribute("height"));
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      xMin = Math.min(xMin, x);
+      yMin = Math.min(yMin, y);
+      xMax = Math.max(xMax, x + w);
+      yMax = Math.max(yMax, y + h);
+    }
+  });
+  let viewBox = null;
+  if (Number.isFinite(xMin)) {
+    const M = 30;
+    viewBox = `${xMin - M} ${yMin - M} ${xMax - xMin + 2 * M} ${yMax - yMin + 2 * M}`;
+  }
+
+  const ent = (state.data && state.data.entities || []).find(
+    (e) => erdKey(e.database_name, e.table_name) === focusKey,
+  );
+  const baseName = (ent && ent.entity_name ? ent.entity_name : focusKey).replace(
+    /[^\w-]+/g, "_",
+  );
+  erdSerialiseAndDownload(clone, `${baseName}-relationships.svg`, viewBox);
+};
+
 // Collapse all / expand all (one toggle, based on current state).
 window.__erdToggleAll = () => {
   if (!state.erdCollapsed) state.erdCollapsed = new Set();
@@ -842,6 +968,75 @@ window.__erdToggleAll = () => {
   state.erdCollapsed = new Set(allCollapsed ? [] : ids);
   showErd();
 };
+
+// Crow's-foot cardinality parsing. Returns [sourceEnd, targetEnd] where each
+// end is one of "one" | "zone" (zero-or-one) | "many" | "omany" (one-or-many)
+// | "zmany" (zero-or-many), or null when the string isn't a recognised
+// two-sided cardinality — in which case we fall back to plain endpoint dots.
+function erdParseCardinality(card) {
+  if (!card) return null;
+  const c = String(card).trim();
+  if (!c) return null;
+  // Split on a two-sided separator (":", "-", " to "), but not on UML range "..".
+  let parts;
+  if (/[\s\-]to[\s\-]/i.test(c)) parts = c.split(/[\s\-]+to[\s\-]+/i);
+  else if (/[:\-]/.test(c)) parts = c.split(/\s*[:\-]\s*/);
+  else return null;
+  if (parts.length !== 2) return null;
+  const a = erdEndKind(parts[0]);
+  const b = erdEndKind(parts[1]);
+  if (!a || !b) return null;
+  return [a, b];
+}
+function erdEndKind(s) {
+  const t = String(s).replace(/\s+/g, "").toUpperCase();
+  if (t === "1" || t === "ONE") return "one";
+  if (t === "0..1" || t === "ZONE" || t === "0,1") return "zone";
+  if (t === "1..*" || t === "1..N" || t === "1..M" || t === "1+") return "omany";
+  if (t === "*" || t === "N" || t === "M" || t === "MANY" || t === "0..*" || t === "0..N")
+    return "many";
+  return null;
+}
+
+// Draw the crow's-foot glyph at an edge endpoint. (x,y) is the path endpoint
+// on the box edge; dx is +1 if the line departs in the +x direction from this
+// end, -1 if it departs leftward. The glyph occupies ~12px in the gutter.
+function erdGlyphSvg(x, y, kind, dx, cls) {
+  const xb = (d) => x + d * dx;
+  const s = `class="erd-glyph ${cls}"`;
+  const sb = `class="erd-glyph-bg ${cls}"`;
+  const apex = 12;
+  switch (kind) {
+    case "one":
+      return `<line ${s} x1="${xb(6)}" y1="${y - 6}" x2="${xb(6)}" y2="${y + 6}"/>`;
+    case "zone":
+      return (
+        `<circle ${sb} cx="${xb(4)}" cy="${y}" r="3.2"/>` +
+        `<line ${s} x1="${xb(11)}" y1="${y - 6}" x2="${xb(11)}" y2="${y + 6}"/>`
+      );
+    case "many":
+      return (
+        `<line ${s} x1="${xb(0)}" y1="${y - 5}" x2="${xb(apex)}" y2="${y}"/>` +
+        `<line ${s} x1="${xb(0)}" y1="${y}" x2="${xb(apex)}" y2="${y}"/>` +
+        `<line ${s} x1="${xb(0)}" y1="${y + 5}" x2="${xb(apex)}" y2="${y}"/>`
+      );
+    case "omany":
+      return (
+        `<line ${s} x1="${xb(2)}" y1="${y - 6}" x2="${xb(2)}" y2="${y + 6}"/>` +
+        `<line ${s} x1="${xb(4)}" y1="${y - 5}" x2="${xb(apex)}" y2="${y}"/>` +
+        `<line ${s} x1="${xb(4)}" y1="${y}" x2="${xb(apex)}" y2="${y}"/>` +
+        `<line ${s} x1="${xb(4)}" y1="${y + 5}" x2="${xb(apex)}" y2="${y}"/>`
+      );
+    case "zmany":
+      return (
+        `<circle ${sb} cx="${xb(3)}" cy="${y}" r="2.8"/>` +
+        `<line ${s} x1="${xb(5)}" y1="${y - 5}" x2="${xb(apex)}" y2="${y}"/>` +
+        `<line ${s} x1="${xb(5)}" y1="${y}" x2="${xb(apex)}" y2="${y}"/>` +
+        `<line ${s} x1="${xb(5)}" y1="${y + 5}" x2="${xb(apex)}" y2="${y}"/>`
+      );
+  }
+  return "";
+}
 
 // Attribute-level box geometry (matches the data-model-erd skill).
 const ERD_BOX_W = 300;
@@ -951,6 +1146,14 @@ function erdBoxSvg(n) {
       `<rect class="erd-toggle-bg" x="${bxr}" y="${byr}" width="17" height="16" rx="4"/>` +
       `<text class="erd-toggle-t" x="${bxr + 8.5}" y="${byr + 12}" text-anchor="middle">${tg}</text>` +
       `<title>${collapsed ? "Expand to attributes" : "Collapse to entity"}</title></g>`,
+  );
+  // Per-box SVG export: sub-graph of this entity + its 1-hop neighbours.
+  const bxe = bxr - 22;
+  p.push(
+    `<g class="erd-toggle" onclick="window.__erdExportFocused(event, '${esc(n.key)}')">` +
+      `<rect class="erd-toggle-bg" x="${bxe}" y="${byr}" width="17" height="16" rx="4"/>` +
+      `<text class="erd-toggle-t" x="${bxe + 8.5}" y="${byr + 12}" text-anchor="middle" font-size="11">\u2913</text>` +
+      `<title>Export this entity's relationships as SVG</title></g>`,
   );
   p.push(`<text class="erd-box-name" x="${x + 14}" y="${y + 18}">${esc(name)}</text>`);
   const sub = collapsed
@@ -1128,27 +1331,59 @@ function showErd() {
     const co = rightward ? 60 : -60;
     const hard = (r.relationship_type || "").toUpperCase() === "FK" || !!r.is_mandatory;
     const cls = hard ? "hard" : "soft";
+    const parsed = erdParseCardinality(r.cardinality);
+    let endpoints;
+    if (parsed) {
+      const [srcKind, tgtKind] = parsed;
+      endpoints =
+        erdGlyphSvg(sx, sy, srcKind, rightward ? 1 : -1, cls) +
+        erdGlyphSvg(tx, ty, tgtKind, rightward ? -1 : 1, cls);
+    } else {
+      endpoints =
+        `<circle class="erd-dot ${cls}" cx="${sx}" cy="${sy}" r="3"/>` +
+        `<circle class="erd-dot ${cls}" cx="${tx}" cy="${ty}" r="3"/>`;
+    }
     edges +=
+      `<g class="erd-edge-g" data-from="${esc(sk)}" data-to="${esc(tk)}">` +
       `<path class="erd-edge ${cls}" data-from="${esc(sk)}" data-to="${esc(tk)}" ` +
       `d="M ${sx} ${sy} C ${sx + co} ${sy} ${tx - co} ${ty} ${tx} ${ty}">` +
       `<title>${esc(r.relationship_meaning || r.relationship_type || "related")}</title></path>` +
-      `<circle class="erd-dot ${cls}" cx="${sx}" cy="${sy}" r="3"/>` +
-      `<circle class="erd-dot ${cls}" cx="${tx}" cy="${ty}" r="3"/>`;
-    let label = r.cardinality || "";
+      endpoints +
+      `</g>`;
+    // Truncate the label to fit the available gap (cap at ~220px so multi-lane
+    // edges don't grow labels into adjacent boxes). Cardinality is preserved
+    // verbatim whenever possible; the meaning gets ellipsised. Full text lives
+    // in a <title> tooltip so nothing is lost.
+    const card = (r.cardinality || "").trim();
     const meaning = (r.relationship_meaning || "").trim();
-    const gap = Math.abs(tx - sx);
-    if (meaning) {
-      const candidate = label ? `${label} · ${meaning}` : meaning;
-      if (candidate.length * 5.2 + 10 <= gap * 0.95) label = candidate;
+    const fullLabel = card && meaning ? `${card} · ${meaning}` : card || meaning;
+    if (fullLabel) {
+      const gap = Math.abs(tx - sx);
+      const maxW = Math.min(Math.max(gap * 0.85, 40), 220);
+      const maxChars = Math.max(4, Math.floor((maxW - 10) / 5.2));
+      let text;
+      if (fullLabel.length <= maxChars) {
+        text = fullLabel;
+      } else if (card && card.length + 5 <= maxChars && meaning) {
+        const room = Math.max(1, maxChars - card.length - 4); // " · " = 3, "…" = 1
+        text = `${card} · ${meaning.slice(0, room)}…`;
+      } else if (card) {
+        text = card;
+      } else {
+        text = meaning.slice(0, Math.max(1, maxChars - 1)) + "…";
+      }
+      edgeLabels.push({ x: (sx + tx) / 2, y: (sy + ty) / 2, text, full: fullLabel, sk, tk });
     }
-    if (label) edgeLabels.push({ x: (sx + tx) / 2, y: (sy + ty) / 2, text: label });
   }
   const labelSvg = edgeLabels
     .map((l) => {
       const w = l.text.length * 5.2 + 10;
+      const title = l.full !== l.text ? `<title>${esc(l.full)}</title>` : "";
       return (
+        `<g class="erd-card-g" data-from="${esc(l.sk)}" data-to="${esc(l.tk)}">${title}` +
         `<rect class="erd-card-bg" x="${l.x - w / 2}" y="${l.y - 8}" width="${w}" height="15" rx="5"/>` +
-        `<text class="erd-card" x="${l.x}" y="${l.y + 3}" text-anchor="middle">${esc(l.text)}</text>`
+        `<text class="erd-card" x="${l.x}" y="${l.y + 3}" text-anchor="middle">${esc(l.text)}</text>` +
+        `</g>`
       );
     })
     .join("");
@@ -1207,7 +1442,8 @@ function showErd() {
     <p class="sub">${byKey.size} entities · ${rels.length} relationships · left = referenced, right = dependent · hover to trace, click to open</p>
     <div class="erd-toolbar">
       <button class="erd-btn" onclick="window.__erdToggleAll()">${allCollapsed ? "＋ Expand all" : "－ Collapse all"}</button>
-      <span class="erd-toolhint">use the +/− on each entity to collapse or expand its attributes</span>
+      <button class="erd-btn" onclick="window.__erdExportFull()">⤓ Export SVG</button>
+      <span class="erd-toolhint">use the +/− on each entity to collapse or expand; ⤓ on a box exports its relationships</span>
     </div>
     <div class="erd-scroll">
       <svg class="erd" width="${width}" height="${contentH}" viewBox="0 0 ${width} ${contentH}">

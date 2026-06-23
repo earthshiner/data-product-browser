@@ -40,34 +40,91 @@ _MONO = "'JetBrains Mono', Menlo, monospace"
 # ---------------------------------------------------------------------------
 _THEMES = {
     "light": {
-        "box": "#FFFFFF", "box_stroke": "#AEC1D1", "hdr": "#EAF1F7",
-        "ename": "#00233C", "edb": "#5f7488", "row_alt": "#F7FAFC",
-        "rowdiv": "#E3EAF0", "cn": "#00233C", "cn_fk": "#2F6FBF",
-        "ct": "#5f7488", "edge_hard": "#E5550A", "edge_soft": "#2F6FBF",
-        "card_ink": "#00233C", "card_bg": "#FFFFFF", "legend": "#5f7488",
-        "pk_bg": "#FF5F02", "pk_tx": "#FFFFFF", "nk_st": "#2F6FBF", "nk_tx": "#2F6FBF",
-        "fk_bg": "#2F6FBF", "fk_tx": "#FFFFFF", "pii_bg": "#9C6FA8", "pii_tx": "#FFFFFF",
-        "sens_bg": "#D64545", "sens_tx": "#FFFFFF", "nn_st": "#AEC1D1", "nn_tx": "#5f7488",
+        "box": "#FFFFFF",
+        "box_stroke": "#AEC1D1",
+        "hdr": "#EAF1F7",
+        "ename": "#00233C",
+        "edb": "#5f7488",
+        "row_alt": "#F7FAFC",
+        "rowdiv": "#E3EAF0",
+        "cn": "#00233C",
+        "cn_fk": "#2F6FBF",
+        "ct": "#5f7488",
+        "edge_hard": "#E5550A",
+        "edge_soft": "#2F6FBF",
+        "card_ink": "#00233C",
+        "card_bg": "#FFFFFF",
+        "legend": "#5f7488",
+        "pk_bg": "#FF5F02",
+        "pk_tx": "#FFFFFF",
+        "nk_st": "#2F6FBF",
+        "nk_tx": "#2F6FBF",
+        "fk_bg": "#2F6FBF",
+        "fk_tx": "#FFFFFF",
+        "pii_bg": "#9C6FA8",
+        "pii_tx": "#FFFFFF",
+        "sens_bg": "#D64545",
+        "sens_tx": "#FFFFFF",
+        "nn_st": "#AEC1D1",
+        "nn_tx": "#5f7488",
     },
     "navy": {
-        "box": "#06304a", "box_stroke": "#1d6388", "hdr": "#0a3a59",
-        "ename": "#E6EEF5", "edb": "#8FB0C7", "row_alt": "#073651",
-        "rowdiv": "#0e3f5e", "cn": "#E6EEF5", "cn_fk": "#7fb4ee",
-        "ct": "#8FB0C7", "edge_hard": "#FF5F02", "edge_soft": "#4A90E2",
-        "card_ink": "#FFFFFF", "card_bg": "#001829", "legend": "#8FB0C7",
-        "pk_bg": "#FF5F02", "pk_tx": "#2a1400", "nk_st": "#4A90E2", "nk_tx": "#7fb4ee",
-        "fk_bg": "#4A90E2", "fk_tx": "#04162b", "pii_bg": "#D8BFD8", "pii_tx": "#3a2440",
-        "sens_bg": "#FF6B5B", "sens_tx": "#330d08", "nn_st": "#1d6388", "nn_tx": "#8FB0C7",
+        "box": "#06304a",
+        "box_stroke": "#1d6388",
+        "hdr": "#0a3a59",
+        "ename": "#E6EEF5",
+        "edb": "#8FB0C7",
+        "row_alt": "#073651",
+        "rowdiv": "#0e3f5e",
+        "cn": "#E6EEF5",
+        "cn_fk": "#7fb4ee",
+        "ct": "#8FB0C7",
+        "edge_hard": "#FF5F02",
+        "edge_soft": "#4A90E2",
+        "card_ink": "#FFFFFF",
+        "card_bg": "#001829",
+        "legend": "#8FB0C7",
+        "pk_bg": "#FF5F02",
+        "pk_tx": "#2a1400",
+        "nk_st": "#4A90E2",
+        "nk_tx": "#7fb4ee",
+        "fk_bg": "#4A90E2",
+        "fk_tx": "#04162b",
+        "pii_bg": "#D8BFD8",
+        "pii_tx": "#3a2440",
+        "sens_bg": "#FF6B5B",
+        "sens_tx": "#330d08",
+        "nn_st": "#1d6388",
+        "nn_tx": "#8FB0C7",
     },
     "black": {
-        "box": "#101013", "box_stroke": "#3b3b44", "hdr": "#17171b",
-        "ename": "#F2F4F7", "edb": "#9aa1ab", "row_alt": "#0c0c0e",
-        "rowdiv": "#222228", "cn": "#F2F4F7", "cn_fk": "#7fb4ee",
-        "ct": "#9aa1ab", "edge_hard": "#FF6A12", "edge_soft": "#4A90E2",
-        "card_ink": "#FFFFFF", "card_bg": "#000000", "legend": "#9aa1ab",
-        "pk_bg": "#FF5F02", "pk_tx": "#1a0c00", "nk_st": "#4A90E2", "nk_tx": "#7fb4ee",
-        "fk_bg": "#4A90E2", "fk_tx": "#04162b", "pii_bg": "#D8BFD8", "pii_tx": "#2a1830",
-        "sens_bg": "#FF6B5B", "sens_tx": "#2a0a06", "nn_st": "#3b3b44", "nn_tx": "#9aa1ab",
+        "box": "#101013",
+        "box_stroke": "#3b3b44",
+        "hdr": "#17171b",
+        "ename": "#F2F4F7",
+        "edb": "#9aa1ab",
+        "row_alt": "#0c0c0e",
+        "rowdiv": "#222228",
+        "cn": "#F2F4F7",
+        "cn_fk": "#7fb4ee",
+        "ct": "#9aa1ab",
+        "edge_hard": "#FF6A12",
+        "edge_soft": "#4A90E2",
+        "card_ink": "#FFFFFF",
+        "card_bg": "#000000",
+        "legend": "#9aa1ab",
+        "pk_bg": "#FF5F02",
+        "pk_tx": "#1a0c00",
+        "nk_st": "#4A90E2",
+        "nk_tx": "#7fb4ee",
+        "fk_bg": "#4A90E2",
+        "fk_tx": "#04162b",
+        "pii_bg": "#D8BFD8",
+        "pii_tx": "#2a1830",
+        "sens_bg": "#FF6B5B",
+        "sens_tx": "#2a0a06",
+        "nn_st": "#3b3b44",
+        "nn_tx": "#9aa1ab",
     },
 }
 
@@ -108,6 +165,91 @@ class _Table:
 
 def _short(fq: str) -> str:
     return fq.split(".")[-1] if "." in fq else fq
+
+
+# Crow's-foot cardinality parsing. Mirrors the live ERD in app.js so the
+# Cookbook diagram and the browser map render identical glyphs.
+_END_KINDS = {
+    "1": "one",
+    "ONE": "one",
+    "0..1": "zone",
+    "ZONE": "zone",
+    "0,1": "zone",
+    "1..*": "omany",
+    "1..N": "omany",
+    "1..M": "omany",
+    "1+": "omany",
+    "*": "many",
+    "N": "many",
+    "M": "many",
+    "MANY": "many",
+    "0..*": "many",
+    "0..N": "many",
+}
+
+
+def _parse_cardinality(card: str | None) -> tuple[str, str] | None:
+    if not card:
+        return None
+    c = card.strip()
+    if not c:
+        return None
+    import re
+
+    if re.search(r"[\s\-]to[\s\-]", c, re.IGNORECASE):
+        parts = re.split(r"[\s\-]+to[\s\-]+", c, flags=re.IGNORECASE)
+    elif re.search(r"[:\-]", c):
+        parts = re.split(r"\s*[:\-]\s*", c)
+    else:
+        return None
+    if len(parts) != 2:
+        return None
+    a = _END_KINDS.get(parts[0].strip().upper().replace(" ", ""))
+    b = _END_KINDS.get(parts[1].strip().upper().replace(" ", ""))
+    if not a or not b:
+        return None
+    return (a, b)
+
+
+def _glyph(x: int, y: int, kind: str, dx: int, colour: str, bg: str) -> str:
+    """Crow's-foot glyph at an edge endpoint. ``dx`` is +1 if the line departs
+    in the +x direction from this end, -1 if it departs leftward."""
+
+    def xb(d: float) -> float:
+        return x + d * dx
+
+    apex = 12
+    stroke = f'stroke="{colour}" stroke-width="1.6" stroke-linecap="round" fill="none"'
+    fillbg = f'fill="{bg}" stroke="{colour}" stroke-width="1.6"'
+    if kind == "one":
+        return f'<line {stroke} x1="{xb(6):.1f}" y1="{y - 6}" x2="{xb(6):.1f}" y2="{y + 6}"/>'
+    if kind == "zone":
+        return (
+            f'<circle {fillbg} cx="{xb(4):.1f}" cy="{y}" r="3.2"/>'
+            f'<line {stroke} x1="{xb(11):.1f}" y1="{y - 6}" '
+            f'x2="{xb(11):.1f}" y2="{y + 6}"/>'
+        )
+    if kind == "many":
+        return (
+            f'<line {stroke} x1="{xb(0):.1f}" y1="{y - 5}" x2="{xb(apex):.1f}" y2="{y}"/>'
+            f'<line {stroke} x1="{xb(0):.1f}" y1="{y}" x2="{xb(apex):.1f}" y2="{y}"/>'
+            f'<line {stroke} x1="{xb(0):.1f}" y1="{y + 5}" x2="{xb(apex):.1f}" y2="{y}"/>'
+        )
+    if kind == "omany":
+        return (
+            f'<line {stroke} x1="{xb(2):.1f}" y1="{y - 6}" x2="{xb(2):.1f}" y2="{y + 6}"/>'
+            f'<line {stroke} x1="{xb(4):.1f}" y1="{y - 5}" x2="{xb(apex):.1f}" y2="{y}"/>'
+            f'<line {stroke} x1="{xb(4):.1f}" y1="{y}" x2="{xb(apex):.1f}" y2="{y}"/>'
+            f'<line {stroke} x1="{xb(4):.1f}" y1="{y + 5}" x2="{xb(apex):.1f}" y2="{y}"/>'
+        )
+    if kind == "zmany":
+        return (
+            f'<circle {fillbg} cx="{xb(3):.1f}" cy="{y}" r="2.8"/>'
+            f'<line {stroke} x1="{xb(5):.1f}" y1="{y - 5}" x2="{xb(apex):.1f}" y2="{y}"/>'
+            f'<line {stroke} x1="{xb(5):.1f}" y1="{y}" x2="{xb(apex):.1f}" y2="{y}"/>'
+            f'<line {stroke} x1="{xb(5):.1f}" y1="{y + 5}" x2="{xb(apex):.1f}" y2="{y}"/>'
+        )
+    return ""
 
 
 def _build_tables(
@@ -160,17 +302,29 @@ def _build_tables(
     return tables
 
 
-def _badge(parts: list[str], x: int, y: int, label: str, fill: str | None,
-           stroke: str | None, text: str, pal: dict) -> int:
+def _badge(
+    parts: list[str],
+    x: int,
+    y: int,
+    label: str,
+    fill: str | None,
+    stroke: str | None,
+    text: str,
+    pal: dict,
+) -> int:
     """Draw one badge chip at (x,y); return its width incl. trailing gap."""
     w = len(label) * 6.4 + 8
     if fill:
         parts.append(f'<rect x="{x}" y="{y}" width="{w:.0f}" height="15" rx="4" fill="{fill}"/>')
     else:
-        parts.append(f'<rect x="{x}" y="{y}" width="{w:.0f}" height="15" rx="4" '
-                     f'fill="none" stroke="{stroke}" stroke-width="1"/>')
-    parts.append(f'<text x="{x + w / 2:.0f}" y="{y + 11}" font-family="{_FONT}" font-size="9.5" '
-                 f'font-weight="700" fill="{text}" text-anchor="middle">{label}</text>')
+        parts.append(
+            f'<rect x="{x}" y="{y}" width="{w:.0f}" height="15" rx="4" '
+            f'fill="none" stroke="{stroke}" stroke-width="1"/>'
+        )
+    parts.append(
+        f'<text x="{x + w / 2:.0f}" y="{y + 11}" font-family="{_FONT}" font-size="9.5" '
+        f'font-weight="700" fill="{text}" text-anchor="middle">{label}</text>'
+    )
     return int(w) + 4
 
 
@@ -200,11 +354,15 @@ def _render_table(t: _Table, x: int, y: int, parts: list[str], pal: dict) -> Non
         ry = y + _HDR_H + idx * _COL_H
         cy = ry + _COL_H // 2 + 4
         if idx % 2 == 0:
-            parts.append(f'<rect x="{x + 1}" y="{ry}" width="{_BOX_W - 2}" height="{_COL_H}" '
-                         f'fill="{pal["row_alt"]}" opacity="0.5"/>')
+            parts.append(
+                f'<rect x="{x + 1}" y="{ry}" width="{_BOX_W - 2}" height="{_COL_H}" '
+                f'fill="{pal["row_alt"]}" opacity="0.5"/>'
+            )
         if idx > 0:
-            parts.append(f'<line x1="{x + 10}" y1="{ry}" x2="{x + _BOX_W - 10}" y2="{ry}" '
-                         f'stroke="{pal["rowdiv"]}" stroke-width="1"/>')
+            parts.append(
+                f'<line x1="{x + 10}" y1="{ry}" x2="{x + _BOX_W - 10}" y2="{ry}" '
+                f'stroke="{pal["rowdiv"]}" stroke-width="1"/>'
+            )
 
         cn_col = pal["cn_fk"] if col.fk else pal["cn"]
         weight = "600" if col.is_key else "400"
@@ -215,12 +373,18 @@ def _render_table(t: _Table, x: int, y: int, parts: list[str], pal: dict) -> Non
 
         # Badges, right-aligned (skill order: PK NK FK PII SENS NN)
         chips = []
-        if col.pk:   chips.append(("PK", pal["pk_bg"], None, pal["pk_tx"]))
-        if col.nk:   chips.append(("NK", None, pal["nk_st"], pal["nk_tx"]))
-        if col.fk:   chips.append(("FK", pal["fk_bg"], None, pal["fk_tx"]))
-        if col.pii:  chips.append(("PII", pal["pii_bg"], None, pal["pii_tx"]))
-        if col.sens: chips.append(("SENS", pal["sens_bg"], None, pal["sens_tx"]))
-        if col.nn:   chips.append(("NN", None, pal["nn_st"], pal["nn_tx"]))
+        if col.pk:
+            chips.append(("PK", pal["pk_bg"], None, pal["pk_tx"]))
+        if col.nk:
+            chips.append(("NK", None, pal["nk_st"], pal["nk_tx"]))
+        if col.fk:
+            chips.append(("FK", pal["fk_bg"], None, pal["fk_tx"]))
+        if col.pii:
+            chips.append(("PII", pal["pii_bg"], None, pal["pii_tx"]))
+        if col.sens:
+            chips.append(("SENS", pal["sens_bg"], None, pal["sens_tx"]))
+        if col.nn:
+            chips.append(("NN", None, pal["nn_st"], pal["nn_tx"]))
 
         widths = [int(len(lbl) * 6.4 + 8) + 4 for lbl, *_ in chips]
         bx = x + _BOX_W - 12 - sum(widths)
@@ -279,26 +443,46 @@ def _render_connectors(
         colour = pal["edge_hard"] if is_hard else pal["edge_soft"]
         dash = "" if is_hard else ' stroke-dasharray="7,5"'
         parts.append(f'<path d="{path}" fill="none" stroke="{colour}" stroke-width="2.3"{dash}/>')
-        parts.append(f'<circle cx="{sx}" cy="{sy}" r="3.2" fill="{colour}"/>')
-        parts.append(f'<circle cx="{tx}" cy="{ty}" r="3.2" fill="{colour}"/>')
 
-        # Build the label, clamped to the available inter-box gap so it never
-        # overflows under a neighbouring table.
+        parsed = _parse_cardinality(r.cardinality)
+        if parsed:
+            src_kind, tgt_kind = parsed
+            s_dx = -1 if s_left else 1
+            t_dx = 1 if s_left else -1
+            parts.append(_glyph(sx, sy, src_kind, s_dx, colour, pal["card_bg"]))
+            parts.append(_glyph(tx, ty, tgt_kind, t_dx, colour, pal["card_bg"]))
+        else:
+            parts.append(f'<circle cx="{sx}" cy="{sy}" r="3.2" fill="{colour}"/>')
+            parts.append(f'<circle cx="{tx}" cy="{ty}" r="3.2" fill="{colour}"/>')
+
+        # Build the label. Cardinality is preserved verbatim wherever possible;
+        # meaning is ellipsised to fit a cap that prevents long-span edges from
+        # growing labels into adjacent tables. Full text lives in a <title>
+        # tooltip so nothing is lost.
         gap = abs(tx - sx)
-        card = r.cardinality or ""
+        card = (r.cardinality or "").strip()
         meaning = (r.relationship_meaning or "").strip()
-        label = card
-        if meaning:
-            candidate = f"{card}  \u00b7  {meaning}" if card else meaning
-            if len(candidate) * 5.4 + 10 <= gap * 0.96:
-                label = candidate
+        full = f"{card}  \u00b7  {meaning}" if card and meaning else (card or meaning)
+        if full:
+            max_w = min(max(gap * 0.85, 40), 220)
+            max_chars = max(4, int((max_w - 10) / 5.4))
+            if len(full) <= max_chars:
+                text = full
+            elif card and len(card) + 5 <= max_chars and meaning:
+                room = max(1, max_chars - len(card) - 5)  # "  \u00b7  " = 4, "\u2026" = 1
+                text = f"{card}  \u00b7  {meaning[:room]}\u2026"
+            elif card:
+                text = card
             else:
-                # try a truncated meaning, else fall back to cardinality only
-                room = int((gap * 0.96 - 10) / 5.4) - (len(card) + 5)
-                if room >= 6:
-                    label = f"{card}  \u00b7  {meaning[:room - 1]}\u2026"
-        if label:
-            labels.append({"x": (sx + tx) / 2, "y": (sy + ty) / 2, "text": label})
+                text = meaning[: max(1, max_chars - 1)] + "\u2026"
+            labels.append(
+                {
+                    "x": (sx + tx) / 2,
+                    "y": (sy + ty) / 2,
+                    "text": text,
+                    "full": full,
+                }
+            )
 
     return labels
 
@@ -307,11 +491,20 @@ def _render_edge_labels(labels: list[dict], parts: list[str], pal: dict) -> None
     for lab in labels:
         w = len(lab["text"]) * 5.4 + 10
         mx, my = lab["x"], lab["y"]
-        parts.append(f'<rect x="{mx - w / 2:.0f}" y="{my - 9:.0f}" width="{w:.0f}" height="16" '
-                     f'rx="5" fill="{pal["card_bg"]}" opacity="0.92"/>')
-        parts.append(f'<text x="{mx:.0f}" y="{my + 3:.0f}" font-family="{_FONT}" font-size="10" '
-                     f'font-weight="600" fill="{pal["card_ink"]}" text-anchor="middle">'
-                     f'{html.escape(lab["text"])}</text>')
+        full = lab.get("full") or lab["text"]
+        parts.append("<g>")
+        if full != lab["text"]:
+            parts.append(f"<title>{html.escape(full)}</title>")
+        parts.append(
+            f'<rect x="{mx - w / 2:.0f}" y="{my - 9:.0f}" width="{w:.0f}" height="16" '
+            f'rx="5" fill="{pal["card_bg"]}" opacity="0.92"/>'
+        )
+        parts.append(
+            f'<text x="{mx:.0f}" y="{my + 3:.0f}" font-family="{_FONT}" font-size="10" '
+            f'font-weight="600" fill="{pal["card_ink"]}" text-anchor="middle">'
+            f"{html.escape(lab['text'])}</text>"
+        )
+        parts.append("</g>")
 
 
 def _render_legend(x0: int, y: int, parts: list[str], pal: dict) -> None:
@@ -328,21 +521,31 @@ def _render_legend(x0: int, y: int, parts: list[str], pal: dict) -> None:
         w = _badge(parts, lx, y - 11, lbl, fill, stroke, txc, pal)
         lx += w + 2
         if note:
-            parts.append(f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" '
-                         f'fill="{pal["legend"]}">{note}</text>')
+            parts.append(
+                f'<text x="{lx}" y="{y}" font-family="{_FONT}" font-size="9" '
+                f'fill="{pal["legend"]}">{note}</text>'
+            )
             lx += len(note) * 5 + 14
         else:
             lx += 8
     # Edge legend
-    parts.append(f'<line x1="{lx}" y1="{y - 4}" x2="{lx + 22}" y2="{y - 4}" '
-                 f'stroke="{pal["edge_hard"]}" stroke-width="2.3"/>')
-    parts.append(f'<text x="{lx + 27}" y="{y}" font-family="{_FONT}" font-size="9" '
-                 f'fill="{pal["legend"]}">FK</text>')
+    parts.append(
+        f'<line x1="{lx}" y1="{y - 4}" x2="{lx + 22}" y2="{y - 4}" '
+        f'stroke="{pal["edge_hard"]}" stroke-width="2.3"/>'
+    )
+    parts.append(
+        f'<text x="{lx + 27}" y="{y}" font-family="{_FONT}" font-size="9" '
+        f'fill="{pal["legend"]}">FK</text>'
+    )
     lx += 27 + 20
-    parts.append(f'<line x1="{lx}" y1="{y - 4}" x2="{lx + 22}" y2="{y - 4}" '
-                 f'stroke="{pal["edge_soft"]}" stroke-width="2.3" stroke-dasharray="7,5"/>')
-    parts.append(f'<text x="{lx + 27}" y="{y}" font-family="{_FONT}" font-size="9" '
-                 f'fill="{pal["legend"]}">soft</text>')
+    parts.append(
+        f'<line x1="{lx}" y1="{y - 4}" x2="{lx + 22}" y2="{y - 4}" '
+        f'stroke="{pal["edge_soft"]}" stroke-width="2.3" stroke-dasharray="7,5"/>'
+    )
+    parts.append(
+        f'<text x="{lx + 27}" y="{y}" font-family="{_FONT}" font-size="9" '
+        f'fill="{pal["legend"]}">soft</text>'
+    )
 
 
 def make_column_erd(
