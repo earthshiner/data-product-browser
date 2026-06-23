@@ -233,14 +233,16 @@
     .pill.ok { color: var(--ok); border-color: var(--ok); }
     .pill.bad { color: var(--pii); border-color: var(--pii); }
     .erd-scroll {
-      overflow: auto; border: 1px solid var(--border); border-radius: 10px;
+      /* Horizontal scrollbar is always visible (affordance — small diagrams
+         won't trigger overflow on a wide window, but the user still wants to
+         see the control). Vertical appears on demand. */
+      overflow-x: scroll; overflow-y: auto;
+      border: 1px solid var(--border); border-radius: 10px;
       background: var(--bg);
-      /* Cap height so the horizontal scrollbar stays visible in the viewport
-         instead of sitting at the bottom of a tall SVG (which forces the user
-         to scroll the page first). */
+      /* Cap height so the horizontal scrollbar stays in the viewport instead
+         of sitting at the bottom of a tall SVG (which would force the user to
+         scroll the page first). */
       max-height: calc(100vh - 220px);
-      /* Always reserve scrollbar space so the gutter is visible — Firefox. */
-      scrollbar-gutter: stable both-edges;
       scrollbar-color: var(--border) transparent;
       scrollbar-width: auto;
     }
