@@ -144,22 +144,35 @@ function renderTree() {
   };
   tree.appendChild(cookbook);
 
+  if (!state.collapsedModules) state.collapsedModules = new Set();
+  // While the user is filtering, expand every module so matches are visible.
+  const forceExpand = !!filter;
+
   for (const [moduleName, entities] of entitiesByModule()) {
     const visible = entities.filter(
       (e) => !filter || e.entity_name.toLowerCase().includes(filter),
     );
     if (!visible.length) continue;
+    const collapsed = !forceExpand && state.collapsedModules.has(moduleName);
 
     const head = document.createElement("div");
-    head.className = "module-name";
-    head.textContent = moduleName;
+    head.className = "module-name module-toggle";
+    head.innerHTML = `<span class="module-chevron">${collapsed ? "▸" : "▾"}</span>` +
+      `<span class="module-label">${esc(moduleName)}</span>` +
+      `<span class="count">${visible.length}</span>`;
+    head.onclick = () => {
+      if (collapsed) state.collapsedModules.delete(moduleName);
+      else state.collapsedModules.add(moduleName);
+      renderTree();
+    };
     tree.appendChild(head);
+    if (collapsed) continue;
 
     for (const e of visible) {
       const item = document.createElement("div");
       item.className = "entity" + (e.entity_metadata_id === state.activeEntity ? " active" : "");
       const cols = columnsFor(e).length;
-      item.innerHTML = `<span>${e.entity_name}</span><span class="count">${cols}</span>`;
+      item.innerHTML = `<span>${esc(e.entity_name)}</span><span class="count">${cols}</span>`;
       item.onclick = () => selectEntity(e.entity_metadata_id);
       tree.appendChild(item);
     }
@@ -298,9 +311,12 @@ function renderEntity(entity) {
     glossary: glossaryFor(entity).length,
     decisions: decisionsFor(entity).length,
   };
-  const tab = (id, label) =>
-    `<div class="tab ${state.activeTab === id ? "active" : ""}" data-tab="${id}">
-       ${label}<span class="badge">${counts[id]}</span></div>`;
+  const tab = (id, label) => {
+    const c = counts[id];
+    const badge = c == null ? "" : `<span class="badge">${c}</span>`;
+    return `<div class="tab ${state.activeTab === id ? "active" : ""}" data-tab="${id}">
+       ${label}${badge}</div>`;
+  };
 
   el("detail").innerHTML = `
     <h2>${esc(entity.entity_name)}</h2>
@@ -316,7 +332,7 @@ function renderEntity(entity) {
     </dl>
     <div class="tabs">
       ${tab("schema", "Schema")}${tab("views", "Views")}${tab("relationships", "Relationships")}
-      ${tab("glossary", "Glossary")}${tab("decisions", "Decisions")}
+      ${tab("ddl", "DDL")}${tab("glossary", "Glossary")}${tab("decisions", "Decisions")}
     </div>
     <div id="tab-body"></div>`;
 
@@ -337,8 +353,46 @@ function renderTabBody(entity) {
   if (state.activeTab === "schema") body.innerHTML = schemaHTML(entity);
   else if (state.activeTab === "views") body.innerHTML = viewsHTML(entity) || empty("No views catalogued for this table.");
   else if (state.activeTab === "relationships") body.innerHTML = relationshipsHTML(entity) || empty("No relationships defined.");
+  else if (state.activeTab === "ddl") renderDdlTab(entity, body);
   else if (state.activeTab === "glossary") body.innerHTML = glossaryHTML(entity) || empty("No glossary terms reference this entity.");
   else if (state.activeTab === "decisions") body.innerHTML = decisionsHTML(entity) || empty("No design decisions affect this entity.");
+}
+
+// Lazy-fetch DDL via SHOW TABLE; cache per entity so re-opening is instant.
+async function renderDdlTab(entity, body) {
+  if (!state.ddlCache) state.ddlCache = new Map();
+  const cacheKey = `${entity.database_name}.${entity.table_name}`;
+  const cached = state.ddlCache.get(cacheKey);
+  const headerHTML = (status) =>
+    `<div class="ddl-toolbar">` +
+    `<code class="ddl-fqn">${esc(entity.database_name)}.${esc(entity.table_name)}</code>` +
+    `<button class="erd-btn" id="ddl-copy">Copy</button>` +
+    `<span class="erd-toolhint">${status}</span></div>`;
+  const wireCopy = (raw) => {
+    const btn = document.getElementById("ddl-copy");
+    if (!btn) return;
+    btn.onclick = () => {
+      navigator.clipboard.writeText(raw).then(
+        () => { btn.textContent = "Copied ✓"; setTimeout(() => (btn.textContent = "Copy"), 1200); },
+        () => { btn.textContent = "Copy failed"; },
+      );
+    };
+  };
+  if (cached && cached.ok) {
+    body.innerHTML = headerHTML("from cache") + `<pre class="ddl-pre"><code>${cached.html}</code></pre>`;
+    wireCopy(cached.raw);
+    return;
+  }
+  body.innerHTML = headerHTML("loading…") + `<div class="empty">Running SHOW TABLE…</div>`;
+  try {
+    const url = `/api/ddl?database=${encodeURIComponent(entity.database_name)}&table=${encodeURIComponent(entity.table_name)}`;
+    const data = await fetchJSON(url);
+    state.ddlCache.set(cacheKey, { ok: true, raw: data.ddl, html: data.ddl_html });
+    body.innerHTML = headerHTML("live") + `<pre class="ddl-pre"><code>${data.ddl_html}</code></pre>`;
+    wireCopy(data.ddl);
+  } catch (exc) {
+    body.innerHTML = headerHTML("error") + `<div class="empty">SHOW TABLE failed: ${esc(exc.message)}</div>`;
+  }
 }
 
 function viewsHTML(entity) {

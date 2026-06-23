@@ -7,6 +7,7 @@ share one contract.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
@@ -17,6 +18,7 @@ from ..exceptions import DataProductError
 from .service import DataProductService
 
 _STATIC_DIR = Path(__file__).parent / "static"
+_SAFE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 
 
 def create_app(service: DataProductService) -> FastAPI:
@@ -52,6 +54,28 @@ def create_app(service: DataProductService) -> FastAPI:
             raise HTTPException(status_code=502, detail=f"Teradata error: {exc}") from None
 
         return JSONResponse({"data_product": dp.model_dump(mode="json"), "warnings": warnings})
+
+    @app.get("/api/ddl")
+    def get_ddl(
+        database: str = Query(..., description="Teradata database name"),
+        table: str = Query(..., description="Teradata table name"),
+    ) -> dict:
+        """Return raw and syntax-highlighted DDL for one table.
+
+        Only safe identifier characters are accepted; the names are interpolated
+        directly into ``SHOW TABLE`` (which does not accept parameter markers).
+        """
+        if not _SAFE_IDENT.match(database) or not _SAFE_IDENT.match(table):
+            raise HTTPException(
+                status_code=400,
+                detail="database and table must be plain Teradata identifiers",
+            )
+        try:
+            return service.show_ddl(database, table)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502, detail=f"SHOW TABLE failed: {str(exc).splitlines()[0]}"
+            ) from None
 
     # Mounted last so the API routes above take precedence over the SPA shell.
     app.mount("/", StaticFiles(directory=str(_STATIC_DIR), html=True), name="static")

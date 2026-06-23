@@ -413,9 +413,25 @@
       overflow-x: auto; margin: 6px 0 10px; }
     pre.sql code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.5; white-space: pre; }
     .sql-keyword { color: #79c0ff; font-weight: 600; }
+    .sql-function { color: #fbbf24; }
     .sql-string { color: #a5d6ff; }
     .sql-number { color: #f0883e; }
     .sql-comment { color: var(--muted); font-style: italic; }
+    /* DDL tab — runs SHOW TABLE on demand. */
+    .ddl-toolbar { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; }
+    .ddl-fqn { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      padding: 4px 8px; font-size: 12px; }
+    pre.ddl-pre { background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 12px 14px; overflow: auto; margin: 0; max-height: calc(100vh - 320px); }
+    pre.ddl-pre code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px;
+      line-height: 1.5; white-space: pre; }
+    /* Collapsible module groups in the navigation tree. */
+    .module-toggle { cursor: pointer; display: flex; align-items: center; gap: 6px;
+      user-select: none; }
+    .module-toggle:hover { color: var(--accent); }
+    .module-chevron { display: inline-block; width: 12px; color: var(--muted); font-size: 10px; }
+    .module-label { flex: 1; }
+    .module-toggle .count { color: var(--muted); font-size: 11px; }
   </style>
 </head>
 <body>
@@ -430,6 +446,6 @@
     <nav id="tree"></nav>
     <main id="detail"><div class="empty">Select a data product to begin.</div></main>
   </div>
-  <script src="/app.js?v=12"></script>
+  <script src="/app.js?v=14"></script>
 </body>
 </html>
