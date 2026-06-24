@@ -100,6 +100,85 @@ Same syntax works on the CLI:
 uv run data-product-browser serve --registry-db MyDb.another_data_product_registry
 ```
 
+### Sample row
+
+The registry is a flat table — one row per data product. Every column is `Optional` in the [`RegistryEntry`](../src/data_product_browser/models.py) model except `product_name`, so you only have to populate the modules your product actually deploys. The collector reads the **view database** for each module if present, otherwise falls back to the base database — populate both if you have a separate view layer (recommended; honours the standard object-placement convention).
+
+DDL (create the table once per system):
+
+```sql
+CREATE MULTISET TABLE MyDb.active_data_product_registry (
+    product_id                    VARCHAR(64),
+    product_name                  VARCHAR(128) NOT NULL,
+    product_version               VARCHAR(32),
+    product_description           VARCHAR(2000),
+    product_status                VARCHAR(16),                  -- 'ACTIVE' is required for discovery
+    owner_team                    VARCHAR(128),
+
+    -- Base-table databases (one per module deployed for this product).
+    domain_database               VARCHAR(128),
+    semantic_database             VARCHAR(128),
+    memory_database               VARCHAR(128),
+    observability_database        VARCHAR(128),
+    search_database               VARCHAR(128),
+    prediction_database           VARCHAR(128),
+
+    -- View databases (the preferred read layer).
+    domain_view_database          VARCHAR(128),
+    semantic_view_database        VARCHAR(128),
+    memory_view_database          VARCHAR(128),
+    observability_view_database   VARCHAR(128),
+    search_view_database          VARCHAR(128),
+    prediction_view_database      VARCHAR(128),
+
+    approved_entrypoint           VARCHAR(256),
+    approved_access_mode          VARCHAR(32),
+    created_at                    TIMESTAMP(6),
+    updated_at                    TIMESTAMP(6)
+)
+PRIMARY INDEX (product_name);
+```
+
+Sample INSERT — a "CallCentre" data product that deploys all six modules with both base and view databases:
+
+```sql
+INSERT INTO MyDb.active_data_product_registry (
+    product_id, product_name, product_version, product_description,
+    product_status, owner_team,
+    domain_database,        semantic_database,        memory_database,
+    observability_database, search_database,          prediction_database,
+    domain_view_database,        semantic_view_database,        memory_view_database,
+    observability_view_database, search_view_database,          prediction_view_database,
+    approved_entrypoint, approved_access_mode,
+    created_at, updated_at
+) VALUES (
+    'DP_CALLCENTRE_001',
+    'CallCentre',
+    '1.0.0',
+    'Call-centre data product — interactions, agents, scores, predictions.',
+    'ACTIVE',                                       -- must be ACTIVE to appear in the browser
+    'cx-analytics-team',
+    'CallCentre_DOM_STD_T',  'CallCentre_SEM_STD_T',  'CallCentre_MEM_STD_T',
+    'CallCentre_OBS_STD_T',  'CallCentre_SCH_STD_T',  'CallCentre_PRD_STD_T',
+    'CallCentre_DOM_STD_V',  'CallCentre_SEM_STD_V',  'CallCentre_MEM_STD_V',
+    'CallCentre_OBS_STD_V',  'CallCentre_SCH_STD_V',  'CallCentre_PRD_STD_V',
+    'CallCentre_SEM_STD_V.entity_metadata',         -- canonical first read for agents
+    'view',
+    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+);
+```
+
+Minimum viable row (single module, no view layer):
+
+```sql
+INSERT INTO MyDb.active_data_product_registry
+    (product_name, product_status, semantic_database)
+VALUES
+    ('SmallProduct', 'ACTIVE', 'SmallProduct_SEM');
+```
+
+After inserting, `data-product-browser serve` lists the product on the next request (or immediately if `--ttl 0`).
+
 ## Web-server-only options
 
 `data-product-browser serve` adds three:
