@@ -420,6 +420,16 @@ class AgentOutcome(_Base):
 # ---------------------------------------------------------------------------
 
 
+class OrphanTable(_Base):
+    """A physical table present in one of the data-product's databases but
+    not catalogued in entity_metadata. Surfaced by the collector's coverage
+    check so the UI can flag what would otherwise be invisible."""
+
+    database_name: str
+    table_name: str
+    table_kind: Optional[str] = None  # 'T' table, 'O' queue, 'V' view, etc.
+
+
 class DataProduct(_Base):
     """Complete snapshot of one AI-Native Data Product, ready for rendering."""
 
@@ -435,6 +445,10 @@ class DataProduct(_Base):
     relationships: list[TableRelationship] = []
     view_metadata: list[ViewMetadata] = []
     data_lineage: list[DataLineage] = []  # definitional lineage now lives in Semantic
+
+    # Coverage check: physical tables that exist in the product's databases but
+    # are missing from entity_metadata. The UI must never silently hide these.
+    uncatalogued_tables: list[OrphanTable] = []
 
     # Memory
     recipes: list[Recipe] = []

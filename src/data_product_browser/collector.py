@@ -31,6 +31,7 @@ from .models import (
     ImplementationNote,
     LineageRun,
     ModuleRegistryEntry,
+    OrphanTable,
     ProductMap,
     QualityMetric,
     Recipe,
@@ -39,6 +40,9 @@ from .models import (
     TrustReport,
     ViewMetadata,
 )
+import re
+
+_SAFE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 
 _REGISTRY_TABLE = "active_data_product_registry"
 
@@ -238,6 +242,58 @@ def collect(
             f"WHERE action_dts >= {window} ORDER BY action_dts DESC",
         )
 
+        # --- Coverage check ------------------------------------------------
+        # Find physical tables sitting in any of the product's databases that
+        # are NOT catalogued in entity_metadata. The browser must never hide
+        # them silently — both the structured list and a warning are emitted.
+        uncatalogued: list[OrphanTable] = []
+        db_set = sorted(
+            {e.database_name for e in entities if e.database_name}
+            | {m.database_name for m in modules if m.database_name}
+        )
+        safe_dbs = [d for d in db_set if _SAFE_IDENT.match(d)]
+        unsafe = [d for d in db_set if d not in safe_dbs]
+        if unsafe:
+            warnings.append(
+                "⚠  Skipped coverage check for databases with unusual names: " + ", ".join(unsafe)
+            )
+        if safe_dbs:
+            try:
+                in_list = ", ".join(f"'{d}'" for d in safe_dbs)
+                cur.execute(
+                    f"SELECT TRIM(DatabaseName), TRIM(TableName), TRIM(TableKind) "
+                    f"FROM DBC.TablesV "
+                    f"WHERE DatabaseName IN ({in_list}) AND TableKind = 'T' "
+                    f"ORDER BY DatabaseName, TableName"
+                )
+                physical = [(str(r[0]), str(r[1]), str(r[2])) for r in cur.fetchall()]
+                catalogued = {(e.database_name.upper(), e.table_name.upper()) for e in entities}
+                for db, tbl, kind in physical:
+                    if (db.upper(), tbl.upper()) not in catalogued:
+                        uncatalogued.append(
+                            OrphanTable(database_name=db, table_name=tbl, table_kind=kind)
+                        )
+                if uncatalogued:
+                    grouped: dict[str, list[str]] = {}
+                    for o in uncatalogued:
+                        grouped.setdefault(o.database_name, []).append(o.table_name)
+                    lines = [
+                        f"    • {db}: {', '.join(sorted(t))}" for db, t in sorted(grouped.items())
+                    ]
+                    warnings.append(
+                        f"⚠  {len(uncatalogued)} physical table(s) live in this data "
+                        f"product's databases but are NOT catalogued in "
+                        f"entity_metadata — they will not appear in the tree or ERD:\n"
+                        + "\n".join(lines)
+                        + "\n  Fix by adding entity_metadata rows (or set is_active = 0 "
+                        "if intentionally hidden)."
+                    )
+            except Exception as exc:
+                warnings.append(
+                    "⚠  Skipped uncatalogued-table coverage check "
+                    f"(DBC.TablesV not accessible): {str(exc).splitlines()[0]}"
+                )
+
     return DataProduct(
         product_name=product_name,
         generated_dts=datetime.now(timezone.utc),
@@ -259,4 +315,5 @@ def collect(
         change_events=change_events,
         lineage_run=lineage_run,
         agent_outcomes=agent_outcomes,
+        uncatalogued_tables=uncatalogued,
     ), warnings

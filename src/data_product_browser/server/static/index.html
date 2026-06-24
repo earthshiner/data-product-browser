@@ -289,6 +289,16 @@
     .erd-glyph-bg.hard { stroke: var(--td-orange); }
     .erd-glyph-bg.soft { stroke: var(--accent); }
     .erd-card-g { pointer-events: all; }
+    /* Uncatalogued (orphan) tables — dashed outline so they read as
+       "physically there, not catalogued" without being confused with proper
+       entities. Surfaced explicitly: never silently hidden. */
+    .erd-orphan-head { fill: var(--pii); font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .05em; }
+    .erd-orphan-bg { fill: var(--panel-2); stroke: var(--pii); stroke-width: 1.4;
+      stroke-dasharray: 6 4; opacity: .85; }
+    .erd-orphan-name { fill: var(--text); font-size: 12px; font-weight: 600; }
+    .erd-orphan-sub { fill: var(--muted); font-size: 10px;
+      font-family: ui-monospace, Menlo, Consolas, monospace; }
     .erd-card-bg { fill: var(--bg); opacity: .82; }
     .erd-card { fill: var(--text); font-size: 9.5px; font-weight: 600; }
     .erd-dimmed { opacity: .12; transition: opacity .12s; }
@@ -430,6 +440,6 @@
     <nav id="tree"></nav>
     <main id="detail"><div class="empty">Select a data product to begin.</div></main>
   </div>
-  <script src="/app.js?v=12"></script>
+  <script src="/app.js?v=13"></script>
 </body>
 </html>
