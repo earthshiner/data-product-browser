@@ -14,6 +14,7 @@ from typing import Any, Callable
 from ..collector import collect, discover_products
 from ..config import resolve_registry_db
 from ..models import DataProduct
+from ..renderers.sql_highlight import highlight_sql
 
 ConnectionFactory = Callable[[], Any]
 
@@ -83,3 +84,19 @@ class DataProductService:
 
         self._cache[product_name] = (now + self._ttl, dp, warnings)
         return dp, warnings
+
+    def show_ddl(self, database: str, table: str) -> dict:
+        """Run ``SHOW TABLE <db>.<table>`` and return raw + highlighted text.
+
+        Identifiers must be validated by the caller — this method assumes the
+        names are already safe to interpolate into SQL.
+        """
+        conn = self._connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(f"SHOW TABLE {database}.{table}")
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+        ddl = "\n".join("" if r[0] is None else str(r[0]) for r in rows).strip()
+        return {"ddl": ddl, "ddl_html": highlight_sql(ddl)}

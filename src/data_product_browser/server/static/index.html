@@ -3,30 +3,48 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" href="/brand/teradata_sym_rgb_pos.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" />
   <title>Data Product Browser</title>
   <style>
+    /* Teradata brand palette — exact hex values from the brand guidelines.
+       Do not substitute. Orange #FF5F02, Navy #00233C, White #FFFFFF. */
     :root {
-      --bg: #0f1419; --panel: #1a2129; --panel-2: #222c36; --border: #2e3a46;
-      --text: #e6edf3; --muted: #8b98a5; --accent: #4aa8ff; --accent-dim: #2d6da3;
+      --td-orange: #FF5F02;
+      --td-navy:   #00233C;
+      --td-blue:   #4A90E2;   /* secondary accent */
+      --td-lavender: #D8BFD8;
+      --bg: #0a1822; --panel: #102233; --panel-2: #16304a; --border: #1f3c5a;
+      --text: #e6edf3; --muted: #8b98a5; --accent: var(--td-blue); --accent-dim: #1f4a78;
       --pii: #ff7b72; --ok: #3fb950; --warn: #d29922;
     }
     * { box-sizing: border-box; }
     body {
-      margin: 0; font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0; font: 14px/1.5 'Inter', -apple-system, Segoe UI, Roboto, sans-serif;
       background: var(--bg); color: var(--text); height: 100vh; overflow: hidden;
+      font-feature-settings: 'cv11', 'ss01';
     }
     header {
-      display: flex; align-items: center; gap: 16px; padding: 10px 18px;
-      background: var(--panel); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 14px; padding: 10px 18px;
+      background: var(--td-navy);
+      border-bottom: 3px solid var(--td-orange);
     }
-    header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+    header .brand-logo { height: 26px; width: auto; display: block; }
+    header .brand-divider {
+      width: 1px; height: 22px; background: rgba(255,255,255,.18); margin: 0 2px;
+    }
+    header .app-title {
+      font-family: 'Inter', sans-serif; font-weight: 300; font-size: 16px;
+      color: #FFFFFF; letter-spacing: .01em;
+    }
     header select, header input {
       background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
       border-radius: 6px; padding: 6px 10px; font-size: 13px;
     }
     .spacer { flex: 1; }
-    .layout { display: flex; height: calc(100vh - 49px); }
+    .layout { display: flex; height: calc(100vh - 49px); } /* header = 10+26+10+3 = 49px */
     #tree {
       width: 320px; min-width: 320px; overflow-y: auto; padding: 12px;
       background: var(--panel); border-right: 1px solid var(--border);
@@ -49,6 +67,24 @@
       font-size: 12px;
     }
     .empty { color: var(--muted); padding: 40px; text-align: center; }
+    /* Brand-coloured loading spinner — pure CSS, no GIF. Hollow ring in
+       Teradata orange that fades to transparent as it sweeps. */
+    .td-loader {
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
+      padding: 60px 20px; color: var(--muted); font-size: 13px;
+    }
+    .td-spinner {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: conic-gradient(from 0deg, var(--td-orange) 0%, rgba(255,95,2,.05) 70%, transparent 100%);
+      -webkit-mask: radial-gradient(farthest-side, transparent 62%, #000 64%);
+              mask: radial-gradient(farthest-side, transparent 62%, #000 64%);
+      animation: td-spin .85s linear infinite;
+    }
+    .td-spinner.sm { width: 28px; height: 28px; }
+    @keyframes td-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .td-spinner { animation-duration: 3s; }
+    }
     h2 { margin: 0 0 4px; font-size: 22px; }
     .sub { color: var(--muted); margin: 0 0 20px; }
     table { border-collapse: collapse; width: 100%; margin-top: 8px; }
@@ -62,7 +98,7 @@
     .tag.pii { background: rgba(255,123,114,.15); color: var(--pii); border: 1px solid var(--pii); }
     .tag.req { background: rgba(63,185,80,.12); color: var(--ok); border: 1px solid var(--ok); }
     .tag.pk { background: rgba(243,108,33,.14); color: var(--td-orange); border: 1px solid var(--td-orange); }
-    .tag.nk { background: rgba(0,167,181,.14); color: var(--td-teal); border: 1px solid var(--td-teal); }
+    .tag.nk { background: rgba(74,144,226,.14); color: var(--td-blue); border: 1px solid var(--td-blue); }
     .tag.fk { background: rgba(74,168,255,.14); color: var(--accent); border: 1px solid var(--accent); }
     .tag.sens { background: var(--pii); color: #1d0a08; border: 1px solid var(--pii); }
     .tag.nn { background: transparent; color: var(--muted); border: 1px solid var(--border); }
@@ -85,11 +121,11 @@
     }
     .tab:hover { color: var(--text); background: rgba(255,255,255,.04); }
     .tab.active {
-      color: #051018;
-      background: linear-gradient(135deg, #00B5E2 0%, #0090b8 100%);
-      box-shadow: 0 0 0 1px rgba(0,181,226,.4), 0 1px 4px rgba(0,181,226,.25);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--td-orange) 0%, #cc4c00 100%);
+      box-shadow: 0 0 0 1px rgba(255,95,2,.4), 0 1px 4px rgba(255,95,2,.25);
     }
-    .tab.active .badge { background: rgba(5,16,24,.25); color: #051018; }
+    .tab.active .badge { background: rgba(0,35,60,.35); color: #FFFFFF; border-color: rgba(255,255,255,.25); }
     .tab .badge {
       background: var(--panel); color: var(--text); border-radius: 10px;
       padding: 1px 8px; font-size: 11px; font-weight: 700; margin-left: 8px;
@@ -127,13 +163,8 @@
     .status-bad { color: var(--pii); font-weight: 600; }
     td.num { text-align: right; font-variant-numeric: tabular-nums; }
     .section-title { font-size: 15px; margin: 26px 0 8px; }
-    /* Collapsible operations sections — Teradata brand accents */
-    :root {
-      --td-orange: #F36C21;  /* Teradata Orange */
-      --td-blue:   #00B5E2;  /* Teradata Sky Blue */
-      --td-navy:   #394C71;  /* Teradata Navy accent */
-      --td-teal:   #00A7B5;  /* Teradata Teal */
-    }
+    /* Collapsible operations sections — Teradata brand accents.
+       Brand palette is defined in the top-level :root above; do not redefine. */
     details.ops-section {
       border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px;
       background: var(--panel); margin: 14px 0; overflow: hidden;
@@ -164,8 +195,8 @@
     details.ops-section.ops-lineage > summary { box-shadow: inset 4px 0 0 var(--td-blue); }
     details.ops-section.ops-change  { border-left-color: var(--td-navy); }
     details.ops-section.ops-change  > summary { box-shadow: inset 4px 0 0 var(--td-navy); }
-    details.ops-section.ops-agent   { border-left-color: var(--td-teal); }
-    details.ops-section.ops-agent   > summary { box-shadow: inset 4px 0 0 var(--td-teal); }
+    details.ops-section.ops-agent   { border-left-color: var(--td-lavender); }
+    details.ops-section.ops-agent   > summary { box-shadow: inset 4px 0 0 var(--td-lavender); }
 
     /* Trust engine banner — prominent and colour-coded by status */
     .trust-banner {
@@ -354,21 +385,21 @@
     .recipe .use-case {
       font-size: 14px; color: #e6edf3; margin: 0 0 10px;
     }
-    .recipe .use-case strong { color: var(--td-teal); font-weight: 700; }
+    .recipe .use-case strong { color: var(--td-blue); font-weight: 700; }
     .recipe .params-note { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
     .recipe .params-note strong { color: var(--td-orange); font-weight: 700; }
     .recipe .perf-note { font-size: 12.5px; color: #f0d9a8; margin-top: 6px; }
     .pill.mode-interactive {
-      background: linear-gradient(135deg, #00B5E2 0%, #0090b8 100%);
-      color: #051018; border-color: #00B5E2; font-weight: 800;
+      background: linear-gradient(135deg, var(--td-blue) 0%, #2f6fbf 100%);
+      color: #FFFFFF; border-color: var(--td-blue); font-weight: 800;
       text-transform: uppercase; letter-spacing: .05em;
-      box-shadow: 0 0 0 1px rgba(0,181,226,.4), 0 1px 4px rgba(0,181,226,.25);
+      box-shadow: 0 0 0 1px rgba(74,144,226,.4), 0 1px 4px rgba(74,144,226,.25);
     }
     .pill.mode-batch {
-      background: linear-gradient(135deg, #F36C21 0%, #c4541a 100%);
-      color: #1a0d04; border-color: #F36C21; font-weight: 800;
+      background: linear-gradient(135deg, var(--td-orange) 0%, #cc4c00 100%);
+      color: #FFFFFF; border-color: var(--td-orange); font-weight: 800;
       text-transform: uppercase; letter-spacing: .05em;
-      box-shadow: 0 0 0 1px rgba(243,108,33,.4), 0 1px 4px rgba(243,108,33,.25);
+      box-shadow: 0 0 0 1px rgba(255,95,2,.4), 0 1px 4px rgba(255,95,2,.25);
     }
     /* Complexity + module pills in the recipe header — strong, distinct colours */
     details.recipe > summary .pill { text-transform: uppercase; letter-spacing: .04em; font-weight: 700; }
@@ -386,7 +417,7 @@
       background: rgba(163,113,247,.22); color: #c8a8ff; border-color: #a371f7;
     }
     details.recipe > summary .pill.mod-teal {
-      background: rgba(0,167,181,.25); color: #5fd9e3; border-color: var(--td-teal);
+      background: rgba(216,191,216,.18); color: var(--td-lavender); border-color: var(--td-lavender);
     }
     details.recipe > summary .pill.mod-amber {
       background: rgba(243,108,33,.22); color: #ffae7a; border-color: var(--td-orange);
@@ -423,14 +454,33 @@
       overflow-x: auto; margin: 6px 0 10px; }
     pre.sql code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.5; white-space: pre; }
     .sql-keyword { color: #79c0ff; font-weight: 600; }
-    .sql-string { color: #a5d6ff; }
+    .sql-type { color: #d2a8ff; }
+    .sql-function { color: #fbbf24; }
+    .sql-string { color: #7ee787; }
     .sql-number { color: #f0883e; }
     .sql-comment { color: var(--muted); font-style: italic; }
+    /* DDL tab — runs SHOW TABLE on demand. */
+    .ddl-toolbar { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; }
+    .ddl-fqn { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      padding: 4px 8px; font-size: 12px; }
+    pre.ddl-pre { background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 12px 14px; overflow: auto; margin: 0; max-height: calc(100vh - 320px); }
+    pre.ddl-pre code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px;
+      line-height: 1.5; white-space: pre; }
+    /* Collapsible module groups in the navigation tree. */
+    .module-toggle { cursor: pointer; display: flex; align-items: center; gap: 6px;
+      user-select: none; }
+    .module-toggle:hover { color: var(--accent); }
+    .module-chevron { display: inline-block; width: 12px; color: var(--muted); font-size: 10px; }
+    .module-label { flex: 1; }
+    .module-toggle .count { color: var(--muted); font-size: 11px; }
   </style>
 </head>
 <body>
   <header>
-    <h1>🗂 Data Product Browser</h1>
+    <img class="brand-logo" src="/brand/teradata_logo_rgb_pos.png" alt="Teradata" />
+    <span class="brand-divider" aria-hidden="true"></span>
+    <span class="app-title">Data Product Browser</span>
     <select id="product-select"><option value="">Loading…</option></select>
     <input id="filter" type="search" placeholder="Filter entities…" />
     <div class="spacer"></div>
@@ -440,6 +490,6 @@
     <nav id="tree"></nav>
     <main id="detail"><div class="empty">Select a data product to begin.</div></main>
   </div>
-  <script src="/app.js?v=13"></script>
+  <script src="/app.js?v=19"></script>
 </body>
 </html>
