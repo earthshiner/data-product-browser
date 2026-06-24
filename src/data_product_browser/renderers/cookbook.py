@@ -12,13 +12,35 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from ..models import DataProduct, EntityMetadata
+from ..models import DataProduct, EntityMetadata, TableRelationship
 from .erd import make_column_erd
 from .jupyter import make_python_code, notebook_data_uri
 from .sql_highlight import highlight_sql
 from .svg import make_join_diagram
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+# FROM / JOIN target — captures '<db>.<tbl>' or '<tbl>' followed by an
+# optional 'AS alias' / 'alias' token. Stops at a keyword that ends the alias.
+_FROM_JOIN = re.compile(
+    r"\b(?:FROM|JOIN)\s+"
+    r"(?P<ref>(?:[A-Za-z_][A-Za-z0-9_$]*\.)?[A-Za-z_][A-Za-z0-9_$]*)"
+    r"(?:\s+(?:AS\s+)?(?P<alias>[A-Za-z_][A-Za-z0-9_$]*))?",
+    re.IGNORECASE,
+)
+
+# ON or AND predicate that equates two qualified column refs.
+_EQ_JOIN = re.compile(
+    r"([A-Za-z_][A-Za-z0-9_$]*)\.([A-Za-z_][A-Za-z0-9_$]*)"
+    r"\s*=\s*"
+    r"([A-Za-z_][A-Za-z0-9_$]*)\.([A-Za-z_][A-Za-z0-9_$]*)"
+)
+
+# Tokens that follow 'JOIN <tbl>' but should NOT be consumed as the alias.
+_ALIAS_STOPWORDS = frozenset(
+    "ON USING WHERE GROUP ORDER HAVING QUALIFY LEFT RIGHT INNER OUTER FULL JOIN "
+    "CROSS LATERAL UNION INTERSECT MINUS EXCEPT AND OR LIMIT OFFSET SAMPLE".split()
+)
 
 # Any '<db>.<table>' reference in SQL. Teradata identifiers are
 # alphanumeric + underscore + $; no dots allowed inside a name.
@@ -87,6 +109,108 @@ def _extract_sql_tables(sql: str, entities: list[EntityMetadata]) -> list[str]:
             seen_upper.add(up)
             seen.append(name)
     return seen
+
+
+def _infer_relationships_from_sql(
+    sql: str, entities: list[EntityMetadata]
+) -> list[TableRelationship]:
+    """Synthesise ``TableRelationship`` rows from a recipe's JOIN ON clauses.
+
+    Only used for the per-recipe Column ERD — gives the user the relationship
+    lines for the joins actually performed even when those joins are not
+    catalogued in ``table_relationship`` (e.g. recipe joins two facts directly
+    that the catalogue records only via a shared dimension).
+
+    Both ends must resolve to catalogued entities (otherwise no columns exist
+    to anchor an edge to). The synthesised row is marked ``relationship_type
+    = 'INFERRED'`` so the ERD's hard/soft styling treats it as a soft line.
+    """
+    known_dbs = _known_databases(entities)
+
+    # Resolve (db, name) -> canonical (db, base-table). Same lookup the join
+    # extractor uses; needed to map alias-bound view references back to entity
+    # rows we have columns for.
+    canonical_pair: dict[tuple[str, str], tuple[str, str]] = {}
+    for e in entities:
+        base_db = (e.database_name or "").upper()
+        if base_db and e.table_name:
+            canonical_pair[(base_db, e.table_name.upper())] = (e.database_name, e.table_name)
+        if e.view_name:
+            v = e.view_name.strip()
+            if "." in v:
+                vdb, _, vtbl = v.partition(".")
+                if vdb.strip() and vtbl.strip():
+                    canonical_pair[(vdb.strip().upper(), vtbl.strip().upper())] = (
+                        e.database_name,
+                        e.table_name,
+                    )
+            elif base_db:
+                canonical_pair[(base_db, v.upper())] = (e.database_name, e.table_name)
+
+    # alias_upper -> (canonical_db, canonical_table). Also covers the
+    # 'no-alias' case (alias == table name).
+    alias_map: dict[str, tuple[str, str]] = {}
+    for m in _FROM_JOIN.finditer(sql):
+        ref = m.group("ref")
+        alias_raw = m.group("alias")
+        # If the captured 'alias' is actually a SQL keyword (ON / WHERE / …),
+        # the FROM/JOIN target had no alias.
+        alias = alias_raw if alias_raw and alias_raw.upper() not in _ALIAS_STOPWORDS else None
+        if "." in ref:
+            db, _, tbl = ref.partition(".")
+        else:
+            db, tbl = None, ref
+        # Only proceed when the db prefix is recognised (or absent and we can
+        # find the bare table in the catalogue).
+        canonical = None
+        if db and db.upper() in known_dbs:
+            canonical = canonical_pair.get((db.upper(), tbl.upper()))
+        if not canonical:
+            # Unqualified — pick the first catalogued match for the bare name.
+            for (_d, n), pair in canonical_pair.items():
+                if n == tbl.upper():
+                    canonical = pair
+                    break
+        if not canonical:
+            continue
+        # Default alias = the table token from the SQL itself (Teradata SQL
+        # treats 'FROM t' as binding 't' as the implicit alias).
+        bound = alias or tbl
+        alias_map[bound.upper()] = canonical
+
+    inferred: list[TableRelationship] = []
+    seen: set[tuple] = set()
+    next_id = -1  # synthetic ids stay out of the way of real relationships
+    for m in _EQ_JOIN.finditer(sql):
+        a, ac, b, bc = (g.upper() for g in m.groups())
+        src = alias_map.get(a)
+        tgt = alias_map.get(b)
+        if not src or not tgt or src == tgt:
+            continue
+        # Edge key keeps the column names so multi-column joins survive.
+        key = (min(src, tgt), max(src, tgt), ac, bc)
+        if key in seen:
+            continue
+        seen.add(key)
+        inferred.append(
+            TableRelationship(
+                relationship_id=next_id,
+                relationship_name=f"{src[1]}_{ac.lower()}__{tgt[1]}_{bc.lower()}",
+                source_database=src[0],
+                source_table=src[1],
+                source_column=m.group(2),
+                target_database=tgt[0],
+                target_table=tgt[1],
+                target_column=m.group(4),
+                relationship_type="INFERRED",
+                cardinality=None,
+                relationship_meaning="Inferred from recipe JOIN clause",
+                is_mandatory=0,
+                is_active=1,
+            )
+        )
+        next_id -= 1
+    return inferred
 
 
 def _extract_table_names(sql: str, entities: list[EntityMetadata]) -> list[str]:
@@ -205,7 +329,12 @@ def _build_context(dp: DataProduct, theme: str = "light") -> dict:
                 "column_erd": make_column_erd(
                     catalogued_tables,
                     dp.columns,
-                    dp.relationships,
+                    # Catalogued relationships + ones inferred from this
+                    # recipe's JOIN ON clauses, so the diagram reflects what
+                    # the recipe actually joins even when the catalogue lacks
+                    # a direct edge between two of its tables.
+                    list(dp.relationships)
+                    + _infer_relationships_from_sql(r.sql_template, dp.entities),
                     dp.entities,
                     theme=theme,
                 ),
