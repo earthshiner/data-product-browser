@@ -259,10 +259,20 @@ def _build_tables(
     entities: list[EntityMetadata],
 ) -> list[_Table]:
     # Case-insensitive lookups — Teradata returns names in varying case.
+    # Track both source and target columns by table, with preserved casing
+    # for synthesis. Each entry: {col_upper: original_case}.
     fk_source: dict[str, set[str]] = {}
+    join_cols_by_table: dict[str, dict[str, str]] = {}
     for r in relationships:
-        if r.is_active:
-            fk_source.setdefault(r.source_table.upper(), set()).add(r.source_column.upper())
+        if not r.is_active:
+            continue
+        fk_source.setdefault(r.source_table.upper(), set()).add(r.source_column.upper())
+        join_cols_by_table.setdefault(r.source_table.upper(), {}).setdefault(
+            r.source_column.upper(), r.source_column
+        )
+        join_cols_by_table.setdefault(r.target_table.upper(), {}).setdefault(
+            r.target_column.upper(), r.target_column
+        )
 
     natural_keys: dict[str, str] = {}
     surrogate_keys: dict[str, str] = {}
@@ -297,6 +307,26 @@ def _build_tables(
             )
             for c in cols_for
         ]
+        # Pad with synthetic FK rows for relationship anchor columns that
+        # column_metadata doesn't catalogue — common when only business
+        # columns are documented and surrogate / natural keys are implicit.
+        # Without these, the edge has no y-anchor and is silently dropped.
+        present = {row.name.upper() for row in rows}
+        for col_upper, col_original in join_cols_by_table.get(key, {}).items():
+            if col_upper in present:
+                continue
+            rows.append(
+                _ColRow(
+                    name=col_original,
+                    data_type="",
+                    pk=(pk_col is not None and col_upper == pk_col),
+                    nk=(nk_col is not None and col_upper == nk_col),
+                    fk=True,
+                    pii=False,
+                    sens=False,
+                    nn=False,
+                )
+            )
         tables.append(_Table(short_name=short, full_name=tname, cols=rows))
 
     return tables
