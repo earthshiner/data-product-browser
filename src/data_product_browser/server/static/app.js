@@ -1382,6 +1382,42 @@ function showErd() {
     isoSvg = isoSvg + isolated.map((k) => erdBoxSvg(byKey.get(k))).join("");
   }
 
+  // Uncatalogued tables: physical tables present in the product's databases
+  // but missing from entity_metadata. Render as dashed placeholder boxes so
+  // they are explicitly visible — they are NOT silently hidden.
+  const orphans = (d.uncatalogued_tables || []).filter((o) => o && o.table_name);
+  let orphanSvg = "";
+  if (orphans.length) {
+    const PER_W = 280;
+    const PER_H = 46;
+    const perRow = Math.max(
+      1,
+      Math.floor((Math.max(layeredW, 600) - ERD_PAD * 2 + 20) / (PER_W + 20)),
+    );
+    const top = contentH + 28;
+    orphanSvg += `<text class="erd-head erd-orphan-head" x="${ERD_PAD}" y="${top}">Uncatalogued (${orphans.length}) — physical tables not in entity_metadata</text>`;
+    orphans.sort((a, b) =>
+      (a.database_name + a.table_name).localeCompare(b.database_name + b.table_name),
+    );
+    const rowTop0 = top + 14;
+    orphans.forEach((o, i) => {
+      const col = i % perRow;
+      const row = Math.floor(i / perRow);
+      const ox = ERD_PAD + col * (PER_W + 20);
+      const oy = rowTop0 + row * (PER_H + 14);
+      const fq = `${o.database_name}.${o.table_name}`;
+      orphanSvg +=
+        `<g class="erd-orphan">` +
+        `<rect class="erd-orphan-bg" x="${ox}" y="${oy}" width="${PER_W}" height="${PER_H}" rx="9"/>` +
+        `<text class="erd-orphan-name" x="${ox + 14}" y="${oy + 20}">${esc(o.table_name)}</text>` +
+        `<text class="erd-orphan-sub" x="${ox + 14}" y="${oy + 36}">${esc(o.database_name)}${o.table_kind ? " · " + esc(o.table_kind) : ""}</text>` +
+        `<title>${esc(fq)} exists in the database but is not catalogued in entity_metadata</title>` +
+        `</g>`;
+    });
+    const rows = Math.ceil(orphans.length / perRow);
+    contentH = rowTop0 + rows * (PER_H + 14) + ERD_PAD;
+  }
+
   // Edges (drawn beneath boxes): anchored at the actual key columns; labels added on top.
   let edges = "";
   const edgeLabels = [];
@@ -1504,7 +1540,7 @@ function showErd() {
   const allCollapsed = allIds.length > 0 && allIds.every((id) => state.erdCollapsed.has(id));
   el("detail").innerHTML = `
     <h2>${esc(d.product_name)} — Entity map</h2>
-    <p class="sub">${byKey.size} entities · ${rels.length} relationships · left = referenced, right = dependent · hover to trace, click to open</p>
+    <p class="sub">${byKey.size} entities · ${rels.length} relationships${orphans.length ? " · ⚠ " + orphans.length + " uncatalogued" : ""} · left = referenced, right = dependent · hover to trace, click to open</p>
     <div class="erd-toolbar">
       <button class="erd-btn" onclick="window.__erdToggleAll()">${allCollapsed ? "＋ Expand all" : "－ Collapse all"}</button>
       <button class="erd-btn" onclick="window.__erdExportFull()">⤓ Export SVG</button>
@@ -1512,7 +1548,7 @@ function showErd() {
     </div>
     <div class="erd-scroll">
       <svg class="erd" width="${width}" height="${contentH}" viewBox="0 0 ${width} ${contentH}">
-        ${modLegend}${badgeLegend}${edgeLegend}${edges}${boxes.join("")}${labelSvg}${isoSvg}
+        ${modLegend}${badgeLegend}${edgeLegend}${edges}${boxes.join("")}${labelSvg}${isoSvg}${orphanSvg}
       </svg>
     </div>`;
 
