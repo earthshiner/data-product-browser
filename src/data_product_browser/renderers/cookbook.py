@@ -26,22 +26,33 @@ _QUALIFIED_REF = re.compile(r"\b([A-Za-z_][A-Za-z0-9_$]*)\.([A-Za-z_][A-Za-z0-9_
 
 
 def _extract_table_names(sql: str, entities: list[EntityMetadata]) -> list[str]:
-    """Return unique short table names from the SQL that match catalogued entities.
+    """Return unique short table names from the SQL that map to catalogued entities.
 
-    Resolves every ``<db>.<table>`` reference in the SQL against the product's
-    ``entity_metadata`` rows (case-insensitive on both parts). Bare ``<table>``
-    references with no database qualifier are also matched if the table name
-    is unique across the catalogue. Order of first occurrence is preserved.
+    Matches both the ``table_name`` and ``view_name`` columns from
+    ``entity_metadata`` (case-insensitive), since recipes routinely reference
+    the business view rather than the base table. Two passes:
+
+    - Pass 1: every qualified ``<db>.<name>`` in the SQL.
+    - Pass 2: bare ``<name>`` tokens. Ambiguous short names (same name in
+      multiple databases) are still accepted on a first-occurrence basis —
+      under-matching produces empty diagrams, which is worse than rendering
+      a slightly-superset ERD.
+
+    Order of first occurrence in the SQL is preserved so the diagram lays
+    out in reading order.
     """
-    catalogued_pairs = {
-        (e.database_name.upper(), e.table_name.upper()): e.table_name for e in entities
-    }
+    # Build (db_upper, name_upper) -> canonical short name, mapping both base
+    # table and view forms back to the same canonical short name.
+    catalogued_pairs: dict[tuple[str, str], str] = {}
     catalogued_short: dict[str, str] = {}
-    short_counts: dict[str, int] = {}
     for e in entities:
-        up = e.table_name.upper()
-        catalogued_short[up] = e.table_name
-        short_counts[up] = short_counts.get(up, 0) + 1
+        db = (e.database_name or "").upper()
+        for name in (e.table_name, e.view_name):
+            if not name:
+                continue
+            up = name.upper()
+            catalogued_pairs.setdefault((db, up), e.table_name)
+            catalogued_short.setdefault(up, e.table_name)
 
     seen: list[str] = []
     matched_upper: set[str] = set()
@@ -53,21 +64,21 @@ def _extract_table_names(sql: str, entities: list[EntityMetadata]) -> list[str]:
         matched_upper.add(up)
         seen.append(short_name)
 
-    # Pass 1: qualified <db>.<table> references — only those that map to a
-    # catalogued entity row count.
+    # Pass 1: qualified <db>.<name> matches anywhere in the SQL.
     for m in _QUALIFIED_REF.finditer(sql):
-        db, table = m.group(1).upper(), m.group(2).upper()
-        canonical = catalogued_pairs.get((db, table))
+        db, name = m.group(1).upper(), m.group(2).upper()
+        canonical = catalogued_pairs.get((db, name))
         if canonical:
             _add(canonical)
 
-    # Pass 2: bare table tokens. Only safe to claim when the short name is
-    # unique across the catalogue (otherwise we'd guess the wrong database).
-    bare = re.compile(r"\b([A-Za-z_][A-Za-z0-9_$]*)\b")
-    for m in bare.finditer(sql):
+    # Pass 2: bare names. The lookup map covers both table_name and view_name,
+    # so a SQL that uses business-view names still resolves to the underlying
+    # base-table short name (which is what erd.py / svg.py expect).
+    for m in re.finditer(r"\b([A-Za-z_][A-Za-z0-9_$]*)\b", sql):
         token = m.group(1).upper()
-        if short_counts.get(token) == 1:
-            _add(catalogued_short[token])
+        canonical = catalogued_short.get(token)
+        if canonical:
+            _add(canonical)
 
     return seen
 
