@@ -65,16 +65,26 @@ A password on the command line (`--td-password`) is supported but visible to any
 
 ## Governance registry
 
-The collector starts from one well-known table — `<registry_db>.active_data_product_registry` — listing every data product with its module databases. The registry database name is resolved by `data_product_browser.config.resolve_registry_db()`:
+The collector starts from one well-known table listing every data product with its module databases. The location is resolved by `data_product_browser.config.resolve_registry_target()`:
 
 1. Explicit `--registry-db` / function argument.
 2. `TDP_REGISTRY_DB` env var (or `.env`).
-3. Built-in default.
+3. Built-in default (`DataProductsMaster_GOV_BUS_V.active_data_product_registry`).
 
-To browse a different governance system, set `TDP_REGISTRY_DB`:
+The configured value may be either a **bare database name** (uses the default table `active_data_product_registry`) or a **fully-qualified `database.table`** — split on the first dot (Teradata identifiers cannot contain a dot).
 
 ```powershell
+# Just override the database; use the default table:
 $env:TDP_REGISTRY_DB = "GOV_REGISTRY_NONPROD"
+
+# Override both database AND table in one value:
+$env:TDP_REGISTRY_DB = "MyDb.another_data_product_registry"
+```
+
+Same syntax works on the CLI:
+
+```bash
+uv run data-product-browser serve --registry-db MyDb.another_data_product_registry
 ```
 
 ## Web-server-only options

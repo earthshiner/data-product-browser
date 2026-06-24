@@ -379,7 +379,13 @@ def serve(
     port: int = typer.Option(8080, "--port", "-p", help="Port to listen on"),
     ttl: int = typer.Option(300, "--ttl", help="Metadata cache lifetime in seconds"),
     registry_db: str = typer.Option(
-        None, "--registry-db", help="Governance registry database (overrides TDP_REGISTRY_DB)"
+        None,
+        "--registry-db",
+        help=(
+            "Governance registry location (overrides TDP_REGISTRY_DB). "
+            "Bare database name uses the default table; pass 'db.table' to "
+            "override the table too (e.g. MyDb.another_data_product_registry)."
+        ),
     ),
     td_host: str = typer.Option(None, "--td-host", help="Teradata host (overrides TD_HOST)"),
     td_user: str = typer.Option(None, "--td-user", help="Teradata username (overrides TD_USER)"),

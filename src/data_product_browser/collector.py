@@ -17,7 +17,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from .config import resolve_registry_db
+from .config import resolve_registry_target
 from .models import (
     AgentOutcome,
     ChangeEvent,
@@ -44,8 +44,6 @@ import re
 
 _SAFE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 
-_REGISTRY_TABLE = "active_data_product_registry"
-
 
 def _fix(value: Any) -> Any:
     """Repair mojibake in string values (UTF-8 bytes stored in a LATIN column)."""
@@ -66,14 +64,15 @@ def discover_products(connection: Any, registry_db: str | None = None) -> list[R
 
     Args:
         connection: Open teradatasql connection.
-        registry_db: Database holding ``active_data_product_registry``. When None,
-            resolved from the ``TDP_REGISTRY_DB`` env var or the standard default.
+        registry_db: Registry location. May be a bare database name (uses the
+            default table) or a fully-qualified ``database.table``. When None,
+            resolved from the ``TDP_REGISTRY_DB`` env var or the standard
+            default.
     """
-    registry_db = resolve_registry_db(registry_db)
+    db, table = resolve_registry_target(registry_db)
     with connection.cursor() as cur:
         cur.execute(
-            f"SELECT * FROM {registry_db}.{_REGISTRY_TABLE} "
-            f"WHERE product_status = 'ACTIVE' ORDER BY product_name"
+            f"SELECT * FROM {db}.{table} WHERE product_status = 'ACTIVE' ORDER BY product_name"
         )
         return _rows(cur, RegistryEntry)
 
@@ -98,16 +97,17 @@ def collect(
     Args:
         product_name: The registry ``product_name`` (e.g. "CallCentre Data Product").
         connection: Open teradatasql connection.
-        registry_db: Governance registry database. When None, resolved from env
-            (``TDP_REGISTRY_DB``) or the standard default.
+        registry_db: Registry location — bare database or ``database.table``.
+            When None, resolved from env (``TDP_REGISTRY_DB``) or the standard
+            default.
         lookback_days: Observability window for time-bounded tables.
     """
-    registry_db = resolve_registry_db(registry_db)
+    db, table = resolve_registry_target(registry_db)
     warnings: list[str] = []
 
     entry = _find_registry_entry(connection, product_name, registry_db)
     if entry is None:
-        raise ValueError(f"Product '{product_name}' not found in {registry_db}.{_REGISTRY_TABLE}.")
+        raise ValueError(f"Product '{product_name}' not found in {db}.{table}.")
 
     sem = entry.semantic_view_database or entry.semantic_database
     mem = entry.memory_view_database or entry.memory_database
