@@ -12,7 +12,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from ..models import DataProduct
+from ..models import DataProduct, EntityMetadata
 from .erd import make_column_erd
 from .jupyter import make_python_code, notebook_data_uri
 from .sql_highlight import highlight_sql
@@ -20,15 +20,55 @@ from .svg import make_join_diagram
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
+# Any '<db>.<table>' reference in SQL. Teradata identifiers are
+# alphanumeric + underscore + $; no dots allowed inside a name.
+_QUALIFIED_REF = re.compile(r"\b([A-Za-z_][A-Za-z0-9_$]*)\.([A-Za-z_][A-Za-z0-9_$]*)\b")
 
-def _extract_table_names(sql: str, product_name: str) -> list[str]:
-    """Return unique short table names referenced in the SQL."""
-    pattern = re.compile(rf"{re.escape(product_name)}_\w+\.(\w+)", re.IGNORECASE)
+
+def _extract_table_names(sql: str, entities: list[EntityMetadata]) -> list[str]:
+    """Return unique short table names from the SQL that match catalogued entities.
+
+    Resolves every ``<db>.<table>`` reference in the SQL against the product's
+    ``entity_metadata`` rows (case-insensitive on both parts). Bare ``<table>``
+    references with no database qualifier are also matched if the table name
+    is unique across the catalogue. Order of first occurrence is preserved.
+    """
+    catalogued_pairs = {
+        (e.database_name.upper(), e.table_name.upper()): e.table_name for e in entities
+    }
+    catalogued_short: dict[str, str] = {}
+    short_counts: dict[str, int] = {}
+    for e in entities:
+        up = e.table_name.upper()
+        catalogued_short[up] = e.table_name
+        short_counts[up] = short_counts.get(up, 0) + 1
+
     seen: list[str] = []
-    for m in pattern.finditer(sql):
-        name = m.group(1)
-        if name not in seen:
-            seen.append(name)
+    matched_upper: set[str] = set()
+
+    def _add(short_name: str) -> None:
+        up = short_name.upper()
+        if up in matched_upper:
+            return
+        matched_upper.add(up)
+        seen.append(short_name)
+
+    # Pass 1: qualified <db>.<table> references — only those that map to a
+    # catalogued entity row count.
+    for m in _QUALIFIED_REF.finditer(sql):
+        db, table = m.group(1).upper(), m.group(2).upper()
+        canonical = catalogued_pairs.get((db, table))
+        if canonical:
+            _add(canonical)
+
+    # Pass 2: bare table tokens. Only safe to claim when the short name is
+    # unique across the catalogue (otherwise we'd guess the wrong database).
+    bare = re.compile(r"\b([A-Za-z_][A-Za-z0-9_$]*)\b")
+    for m in bare.finditer(sql):
+        token = m.group(1).upper()
+        if short_counts.get(token) == 1:
+            _add(catalogued_short[token])
+
     return seen
 
 
@@ -44,7 +84,7 @@ def _build_context(dp: DataProduct, theme: str = "light") -> dict:
     # Enrich each recipe with SQL, Jupyter, join diagram, and column ERD
     enriched_recipes = []
     for r in dp.recipes:
-        tables_in_sql = _extract_table_names(r.sql_template, dp.product_name)
+        tables_in_sql = _extract_table_names(r.sql_template, dp.entities)
         # Filter relationships to only those between tables in this recipe
         recipe_tables_upper = {t.upper() for t in tables_in_sql}
         recipe_rels = [
