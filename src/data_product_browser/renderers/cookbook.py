@@ -25,21 +25,67 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _QUALIFIED_REF = re.compile(r"\b([A-Za-z_][A-Za-z0-9_$]*)\.([A-Za-z_][A-Za-z0-9_$]*)\b")
 
 
-def _extract_sql_tables(sql: str) -> list[str]:
-    """Return every qualified ``<db>.<table>`` short name in the SQL.
-
-    Used for the Join Diagram so it can still render even when a recipe
-    references a derived view that isn't catalogued in ``entity_metadata``.
-    Order of first occurrence preserved; duplicates removed.
+def _known_databases(entities: list[EntityMetadata]) -> set[str]:
+    """Return the set of database names that legitimately appear in the
+    product's SQL. Includes both the ``database_name`` field and the database
+    portion of a qualified ``view_name`` (when present). Upper-cased.
     """
+    dbs: set[str] = set()
+    for e in entities:
+        if e.database_name:
+            dbs.add(e.database_name.upper())
+        if e.view_name and "." in e.view_name:
+            v_db, _, _ = e.view_name.partition(".")
+            if v_db.strip():
+                dbs.add(v_db.strip().upper())
+    return dbs
+
+
+def _extract_sql_tables(sql: str, entities: list[EntityMetadata]) -> list[str]:
+    """Return every ``<db>.<table>`` short name from the SQL whose ``db`` part
+    is a known product database.
+
+    The DB-prefix filter is essential — without it, ``model_pred.call_id``
+    (alias.column) would be matched as if it were a table reference. We learn
+    the legitimate prefixes from ``entity_metadata`` (both base and view
+    database names). Used by the Join Diagram so derived views that aren't
+    catalogued in their own right still render — provided they live in a
+    known database.
+
+    Names that map to a catalogued entity (via either ``table_name`` or
+    ``view_name``) are returned in their canonical base-table form, so the
+    Join Diagram dedupes against ``_extract_table_names`` output cleanly.
+    """
+    known_dbs = _known_databases(entities)
+
+    # (db_upper, name_upper) -> canonical base-table short name.
+    canonical: dict[tuple[str, str], str] = {}
+    for e in entities:
+        base_db = (e.database_name or "").upper()
+        if base_db and e.table_name:
+            canonical[(base_db, e.table_name.upper())] = e.table_name
+        if e.view_name:
+            view_raw = e.view_name.strip()
+            if "." in view_raw:
+                v_db, _, v_tbl = view_raw.partition(".")
+                if v_db.strip() and v_tbl.strip():
+                    canonical[(v_db.strip().upper(), v_tbl.strip().upper())] = e.table_name
+            elif base_db:
+                canonical[(base_db, view_raw.upper())] = e.table_name
+
     seen: list[str] = []
     seen_upper: set[str] = set()
     for m in _QUALIFIED_REF.finditer(sql):
-        table = m.group(2)
-        up = table.upper()
+        db, table = m.group(1), m.group(2)
+        if db.upper() not in known_dbs:
+            continue
+        # Prefer the canonical base-table name when known; otherwise emit the
+        # raw name from the SQL (an uncatalogued derived view).
+        name = canonical.get((db.upper(), table.upper()), table)
+        up = name.upper()
         if up not in seen_upper:
             seen_upper.add(up)
-            seen.append(table)
+            seen.append(name)
     return seen
 
 
@@ -129,7 +175,7 @@ def _build_context(dp: DataProduct, theme: str = "light") -> dict:
         # Two views of the same SQL: every qualified table reference (for the
         # Join Diagram, so derived/uncatalogued views still render) and only
         # catalogued tables (for the Column ERD, which needs column metadata).
-        all_tables = _extract_sql_tables(r.sql_template)
+        all_tables = _extract_sql_tables(r.sql_template, dp.entities)
         catalogued_tables = _extract_table_names(r.sql_template, dp.entities)
         # Merge: union preserving order — catalogued first, then any additional
         # uncatalogued tables found in the raw SQL.
