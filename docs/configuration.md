@@ -11,7 +11,8 @@ For each setting, the first source that yields a value wins:
 | Host | `--td-host` → `TD_HOST` (env or `.env`) |
 | User | `--td-user` → `TD_USER` (env or `.env`) |
 | Password | `--td-password` → `TD_PASSWORD` (env or `.env`) → OS keyring → interactive prompt (TTY only) |
-| Registry DB | `--registry-db` → `TDP_REGISTRY_DB` (env or `.env`) → built-in default |
+| Registry database | `--registry-db` (or `db` part if qualified) → `TDP_REGISTRY_DB` (or `db` part if qualified) → built-in default |
+| Registry table | `--registry-db` `.table` part (if qualified) → `TDP_REGISTRY_TABLE` (env or `.env`) → `TDP_REGISTRY_DB` `.table` part (if qualified) → built-in default |
 
 Missing host or user aborts immediately with a cross-shell snippet showing how to set the environment variable in PowerShell, cmd.exe, and bash/zsh. Missing password with no TTY (e.g. piped output, service) aborts with the same kind of guidance; with a TTY it prompts interactively via `getpass`.
 
@@ -79,6 +80,18 @@ $env:TDP_REGISTRY_DB = "GOV_REGISTRY_NONPROD"
 
 # Override both database AND table in one value:
 $env:TDP_REGISTRY_DB = "MyDb.another_data_product_registry"
+
+# Or keep them separate (TDP_REGISTRY_TABLE wins over the table-part
+# of TDP_REGISTRY_DB):
+$env:TDP_REGISTRY_DB    = "MyDb"
+$env:TDP_REGISTRY_TABLE = "another_data_product_registry"
+```
+
+Equivalent `.env`:
+
+```
+TDP_REGISTRY_DB=MyDb
+TDP_REGISTRY_TABLE=another_data_product_registry
 ```
 
 Same syntax works on the CLI:
