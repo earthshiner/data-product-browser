@@ -25,6 +25,24 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _QUALIFIED_REF = re.compile(r"\b([A-Za-z_][A-Za-z0-9_$]*)\.([A-Za-z_][A-Za-z0-9_$]*)\b")
 
 
+def _extract_sql_tables(sql: str) -> list[str]:
+    """Return every qualified ``<db>.<table>`` short name in the SQL.
+
+    Used for the Join Diagram so it can still render even when a recipe
+    references a derived view that isn't catalogued in ``entity_metadata``.
+    Order of first occurrence preserved; duplicates removed.
+    """
+    seen: list[str] = []
+    seen_upper: set[str] = set()
+    for m in _QUALIFIED_REF.finditer(sql):
+        table = m.group(2)
+        up = table.upper()
+        if up not in seen_upper:
+            seen_upper.add(up)
+            seen.append(table)
+    return seen
+
+
 def _extract_table_names(sql: str, entities: list[EntityMetadata]) -> list[str]:
     """Return unique short table names from the SQL that map to catalogued entities.
 
@@ -42,17 +60,30 @@ def _extract_table_names(sql: str, entities: list[EntityMetadata]) -> list[str]:
     out in reading order.
     """
     # Build (db_upper, name_upper) -> canonical short name, mapping both base
-    # table and view forms back to the same canonical short name.
+    # table and view forms back to the same canonical short name. view_name in
+    # entity_metadata is commonly stored fully-qualified ('db.table'), so split
+    # on a dot when present and index BOTH parts.
     catalogued_pairs: dict[tuple[str, str], str] = {}
     catalogued_short: dict[str, str] = {}
+
+    def _index(db: str, name: str, canonical: str) -> None:
+        catalogued_pairs.setdefault((db.upper(), name.upper()), canonical)
+        catalogued_short.setdefault(name.upper(), canonical)
+
     for e in entities:
-        db = (e.database_name or "").upper()
-        for name in (e.table_name, e.view_name):
-            if not name:
-                continue
-            up = name.upper()
-            catalogued_pairs.setdefault((db, up), e.table_name)
-            catalogued_short.setdefault(up, e.table_name)
+        base_db = (e.database_name or "").strip()
+        table = (e.table_name or "").strip()
+        if base_db and table:
+            _index(base_db, table, e.table_name)
+        if e.view_name:
+            view_raw = e.view_name.strip()
+            if "." in view_raw:
+                v_db, _, v_tbl = view_raw.partition(".")
+                v_db, v_tbl = v_db.strip(), v_tbl.strip()
+                if v_db and v_tbl:
+                    _index(v_db, v_tbl, e.table_name)
+            elif base_db:
+                _index(base_db, view_raw, e.table_name)
 
     seen: list[str] = []
     matched_upper: set[str] = set()
@@ -95,9 +126,21 @@ def _build_context(dp: DataProduct, theme: str = "light") -> dict:
     # Enrich each recipe with SQL, Jupyter, join diagram, and column ERD
     enriched_recipes = []
     for r in dp.recipes:
-        tables_in_sql = _extract_table_names(r.sql_template, dp.entities)
-        # Filter relationships to only those between tables in this recipe
-        recipe_tables_upper = {t.upper() for t in tables_in_sql}
+        # Two views of the same SQL: every qualified table reference (for the
+        # Join Diagram, so derived/uncatalogued views still render) and only
+        # catalogued tables (for the Column ERD, which needs column metadata).
+        all_tables = _extract_sql_tables(r.sql_template)
+        catalogued_tables = _extract_table_names(r.sql_template, dp.entities)
+        # Merge: union preserving order — catalogued first, then any additional
+        # uncatalogued tables found in the raw SQL.
+        seen = {t.upper() for t in catalogued_tables}
+        join_tables = list(catalogued_tables)
+        for t in all_tables:
+            if t.upper() not in seen:
+                seen.add(t.upper())
+                join_tables.append(t)
+        # Filter relationships to only those between tables in this recipe.
+        recipe_tables_upper = {t.upper() for t in join_tables}
         recipe_rels = [
             rel
             for rel in dp.relationships
@@ -109,12 +152,12 @@ def _build_context(dp: DataProduct, theme: str = "light") -> dict:
                 "recipe": r,
                 "sql_html": highlight_sql(r.sql_template),
                 "join_diagram": make_join_diagram(
-                    tables_in_sql,
+                    join_tables,
                     relationships=recipe_rels,
                     entities=dp.entities,
                 ),
                 "column_erd": make_column_erd(
-                    tables_in_sql,
+                    catalogued_tables,
                     dp.columns,
                     dp.relationships,
                     dp.entities,
