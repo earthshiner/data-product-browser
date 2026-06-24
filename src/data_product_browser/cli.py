@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import getpass
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -294,7 +295,13 @@ def generate(
 def dump(
     product: str = typer.Argument(..., help="Registry product name"),
     output: Path = typer.Option(
-        Path("data.json"), "--output", "-o", help="Path to write JSON snapshot"
+        Path("data.json"),
+        "--output",
+        "-o",
+        help=(
+            "Path to write the JSON snapshot. Pass a file (e.g. snap.json) or "
+            "a directory — when a directory, '<product>.json' is written inside."
+        ),
     ),
     lookback: int = typer.Option(90, "--lookback", help="Observability lookback in days"),
     td_host: str = typer.Option(None, "--td-host", help="Teradata host (overrides TD_HOST)"),
@@ -321,6 +328,13 @@ def dump(
 
     for w in warnings:
         typer.echo(f"\n{w}", err=True)
+
+    # Treat an existing directory (or a path ending in a separator) as a
+    # folder to drop '<product>.json' into. This matches `generate`'s
+    # --output behaviour so 'serve / dump / generate' stay consistent.
+    if output.is_dir() or str(output).endswith(("/", "\\")):
+        safe = re.sub(r"[^\w.-]+", "_", product).strip("_") or "data"
+        output = output / f"{safe}.json"
 
     try:
         output.parent.mkdir(parents=True, exist_ok=True)
